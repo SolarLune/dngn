@@ -6,7 +6,7 @@ import (
 	"github.com/veandco/go-sdl2/img"
 	"github.com/veandco/go-sdl2/sdl"
 
-	"github.com/SolarLune/dngn/dngn"
+	"github.com/SolarLune/dngn"
 )
 
 type WorldInterface interface {
@@ -25,7 +25,7 @@ type World1 struct {
 
 func (world *World1) Create() {
 
-	world.Tileset, _ = img.LoadTexture(renderer, "Tileset.png")
+	world.Tileset, _ = img.LoadTexture(renderer, "assets/Tileset.png")
 
 	world.GameMap = dngn.NewRoom(0, 0, 40, 23, nil)
 

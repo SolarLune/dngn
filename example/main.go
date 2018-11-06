@@ -106,7 +106,7 @@ func DrawText(x, y int32, textLines ...string) {
 
 	for _, text := range textLines {
 
-		font, _ := ttf.OpenFont("ARCADEPI.TTF", 12)
+		font, _ := ttf.OpenFont("assets/ARCADEPI.TTF", 12)
 		defer font.Close()
 
 		var surf *sdl.Surface

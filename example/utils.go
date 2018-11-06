@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/SolarLune/dngn/dngn"
+	"github.com/SolarLune/dngn"
 	"github.com/veandco/go-sdl2/sdl"
 )
 
