@@ -5,7 +5,7 @@ import (
 
 	"github.com/veandco/go-sdl2/sdl"
 
-	"github.com/SolarLune/dngn/dngn"
+	"github.com/SolarLune/dngn"
 )
 
 // A pure neighbor-checking test.
