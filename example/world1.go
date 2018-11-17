@@ -36,7 +36,7 @@ func (world *World1) Create() {
 
 		mapSelection.Shrink(true).Invert().Fill(1) // Outline
 		world.GameMap.GenerateBSP(1, 2, 20)
-		mapSelection.ByValue(0).ByChance(0.1).Fill(3) // 3 is the alternate floor
+		mapSelection.ByValue(0).ByPercentage(0.1).Fill(3) // 3 is the alternate floor
 
 	} else if WorldGenerationMode == 1 {
 
@@ -48,7 +48,7 @@ func (world *World1) Create() {
 		world.GameMap.GenerateRoomPlacer(0, 6, 3, 3, 5, 5, true)
 		mapSelection.ByValue(0).By(func(x, y int) bool {
 			return (world.GameMap.Get(x+1, y) == 1 && world.GameMap.Get(x-1, y) == 1) || (world.GameMap.Get(x, y-1) == 1 && world.GameMap.Get(x, y+1) == 1)
-		}).ByChance(0.25).Fill(2)
+		}).ByPercentage(0.25).Fill(2)
 	}
 
 	fmt.Println(world.GameMap.DataToString())

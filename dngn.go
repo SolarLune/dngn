@@ -30,7 +30,7 @@ type Room struct {
 	CustomSeed    bool
 }
 
-// NewRoom returns a new Room. X and Y are the position of the Room in the destination Map.
+// NewRoom returns a new Room with the specified width and height.
 func NewRoom(width, height int) *Room {
 
 	r := &Room{Width: width, Height: height}
@@ -612,26 +612,33 @@ func (selection Selection) ByValue(value int) Selection {
 
 }
 
-// ByChance filters the Selection down using a percentage chance to select Cells. Note that to be simple implementation-wise,
-// this is just chance-based, not random percentage-based. For example, if the function is run with a percentage of 0.5,
-// or 50%, it won't randomly select 50% of the cells in the Selection, but rather randomly either select or reject each cell,
-// given a 50% chance), until it runs through all cells, or has a Selection of 50% in count. So the end result could
-// theoretically contain no Cells, but in practice, it is essentially infinitely more likely to be very close to the
-// percentage provided. Naturally, this likelihood rises with larger Selections.
-func (selection Selection) ByChance(percentage float32) Selection {
+// ByPercentage selects the provided percentage of the cells curently in the Selection.
+func (selection Selection) ByPercentage(percentage float32) Selection {
 
-	current := 0
+	cells := make([][]int, 0)
 
-	return selection.By(func(x, y int) bool {
-		if current >= int(float32(selection.Count())*percentage) {
-			return false
+	for i := 0; i < int(float32(selection.Count())*percentage); i++ {
+
+		c := selection.Cells[rand.Intn(selection.Count())]
+
+		choseCell := false
+
+		for _, o := range cells {
+			if c[0] == o[0] && c[1] == o[1] {
+				i--
+				choseCell = true
+			}
 		}
-		if rand.Float32() <= percentage {
-			current++
-			return true
+
+		if !choseCell {
+			cells = append(cells, c)
 		}
-		return false
-	})
+
+	}
+
+	selection.Cells = cells
+
+	return selection
 
 }
 
@@ -863,7 +870,7 @@ func (selection Selection) Degrade(from, to int) Selection {
 }
 
 // Count returns the number of cells in the Selection.
-func (selection *Selection) Count() int {
+func (selection Selection) Count() int {
 	return len(selection.Cells)
 }
 

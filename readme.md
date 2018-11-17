@@ -3,6 +3,8 @@
 
 ![dngn](https://user-images.githubusercontent.com/4733521/47975754-fadd6e80-e063-11e8-932c-f05d8110eddf.gif)
 
+[GoDocs](https://godoc.org/github.com/SolarLune/dngn)
+
 ## What is dngn?
 
 dngn is a golang library specifically created to help make generating random maps easier.
@@ -25,7 +27,7 @@ Just go get it and import it in your game application.
 
 ## How do I use it?
 
-dngn is based around Rooms. A Room contains an int array, representing the Room's data. You can either manipulate the data array manually, or use the included functions to alter the data. Rooms can also contain other Rooms, forming a hierarchy - in this case, a child Room will point to the root Room's map data array.
+dngn is based around Rooms and Selections. A Room contains an int array, representing the Room's data. You can either manipulate the data array manually, or use Selections to grab a selection of cells in the Room to alter. 
 
 To start off with using dngn, you can just create a Room, and then use one of the included Generate functions to generate the data:
 
@@ -36,12 +38,14 @@ var GameMap *dngn.Room
 
 func Init() {
 
-    // This line creates a new Room. The position is 0, 0, and is ignored if the Room is a
-    // root (a root Room doesn't have a parent). The size is 10x10, and the parent is nil (so it is a root).
-    GameMap = dngn.NewRoom(0, 0, 10, 10, nil)
+    // This line creates a new Room. The size is 10x10.
+    GameMap = dngn.NewRoom(10, 10)
 
-    // This will fill the map with "1"s.
-    GameMap.Fill(1)
+    // This will select the cells the map has, and then fill the selection with "1"s.
+    GameMap.Select().Fill(1)
+
+    // Selections are structs, so we can store Selections in variables to store the "view" of the data.
+    selection := GameMap.Select()
 
     // This will run a drunk-walk generation algorithm on the Room. It starts at a random point
     // in the Room, and walks around the Room, placing the value specified (0, in this case)
@@ -51,13 +55,26 @@ func Init() {
     // This function will degrade the map slightly, making cells with a 0 in them randomly turn into a cell with a 1 in it.
     // If the cell is next to the target value (1), then it's more likely to turn into a 1.
     // If it isn't surrounded on any sides by a 1, then it won't.
-    GameMap.Degrade(0, 1)
+    selection.Degrade(0, 1)
+
+    // Room.DataToString() will present the data in a nice, easy-to-understand visual format, useful when debugging.
+    fmt.Println(GameMap.DataToString())
 
     // Now we're done! We can use the Room.
 
 }
 
 ```
+
+Selections can also be powerful, as they allow you to easily select cells to manipulate. You can also chain Selection filtering functions together. As an example, say you wanted to randomly change some of the floor tiles (0) into trap tiles (9). You could easily do this with a Selection, like so:
+
+```go
+    GameMap.Select().ByValue(0).ByPercentage(0.1).Fill(9)
+```
+
+The line above selects the cells in the Room, and then filters it down to just the cells that have a value of 0. Then it selects 10% of them, and finally fills that selection with the value of 9.
+
+---
 
 And that's about it! There are also some nice additional features to make it easier to handle working with and altering Rooms.
 
