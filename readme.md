@@ -1,7 +1,7 @@
 
 # dngn
 
-![dngn](https://user-images.githubusercontent.com/4733521/47975754-fadd6e80-e063-11e8-932c-f05d8110eddf.gif)
+![dngn_v0.2](https://user-images.githubusercontent.com/4733521/48660612-68e94480-ea19-11e8-8f4d-b378fa64dabe.gif)
 
 [GoDocs](https://godoc.org/github.com/SolarLune/dngn)
 

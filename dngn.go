@@ -14,12 +14,9 @@ import (
 )
 
 // Room represents a dungeon map.
-// X and Y are the position of the Room. This is basically only used when checking to see if Rooms are neighbors.
-// Width and Height are the width and height of the Room in the layout. If the Room is a parent-less root Room, then this
-// determines the size of the overall Data structure backing the Room layout.
-// Data is the core underlying data structure representing the dungeon. It's a 2D array of numbers. If the Room is a root Room,
-// then this will be a pointer to the array itself. If this room is a child, then this will be a pointer to the parent's
-// pointer. In other words, all Rooms point to the same Data array to simplify editing it.
+// Width and Height are the width and height of the Room in the layout. This determines the size of the overall Data structure
+// backing the Room layout.
+// Data is the core underlying data structure representing the dungeon. It's a 2D array of ints.
 // Seed is the seed of the Room to use when doing random generation using the Generate* functions below.
 // CustomSeed indicates whether the Seed was customized - if not, then it will default to using the time of the system to have
 // random generation each time you use Generate* functions.
@@ -112,6 +109,7 @@ func (room *Room) GenerateBSP(wallValue, doorValue, numSplits int) {
 
 		room.DrawLine(parent.X+1, parent.Y+splitCY, parent.X+parent.W-1, parent.Y+splitCY, wallValue, 1, false)
 
+		// Create doors somewhere in the lines
 		for i := 0; i < 100; i++ {
 			rx := parent.X + 1 + rand.Intn(parent.W-1)
 			if room.Get(rx, parent.Y+splitCY-1) == wallValue || room.Get(rx, parent.Y+splitCY+1) == wallValue {
@@ -120,15 +118,6 @@ func (room *Room) GenerateBSP(wallValue, doorValue, numSplits int) {
 			room.Set(rx, parent.Y+splitCY, doorValue)
 			break
 		}
-
-		// for i := 0; i < 100; i++ {
-		// 	rY := parent.Y + rand.Intn(parent.H)
-		// 	if room.Get(parent.X-1, rY) == wallValue || room.Get(parent.X+1, rY) == wallValue {
-		// 		continue
-		// 	}
-		// 	room.Set(parent.X, rY, doorValue)
-		// 	break
-		// }
 
 		return a, b, true
 
@@ -155,7 +144,7 @@ func (room *Room) GenerateBSP(wallValue, doorValue, numSplits int) {
 
 		i++
 
-		if i >= numSplits*10 { // Assume it's done and would just hang the system
+		if i >= numSplits*10 { // Assume it's done to avoid just hanging the system
 			break
 		}
 
@@ -182,39 +171,12 @@ func (room *Room) GenerateBSP(wallValue, doorValue, numSplits int) {
 
 	}
 
-	// for _, r := range rooms {
-
-	// 	// cy := r.Y + 1 + int(float32(r.H-1)*rand.Float32())
-
-	// 	// if room.Get(r.X-1, cy) == 0 {
-	// 	// 	room.Set(r.X, cy, doorValue)
-	// 	// }
-
-	// 	cy := r.Y + 1 + int(float32(r.H-1)*rand.Float32())
-
-	// 	if room.Get(r.X+r.W+1, cy) == 0 {
-	// 		room.Set(r.X+r.W, cy, doorValue)
-	// 	}
-
-	// 	// cx := r.X + 1 + int(float32(r.W-1)*rand.Float32())
-
-	// 	// if room.Get(cx, r.Y-1) == 0 {
-	// 	// 	room.Set(cx, r.Y, doorValue)
-	// 	// }
-
-	// 	// cx := r.X + 1 + int(float32(r.W-1)*rand.Float32())
-
-	// 	// if room.Get(cx, r.Y+r.H) == 0 {
-	// 	// 	room.Set(cx, r.Y+r.H-1, doorValue)
-	// 	// }
-
-	// }
-
 }
 
 // GenerateRoomPlacer generates a map using random room placement. roomCount is how many rooms to place, roomMinWidth and Height
 // are how small they can be, minimum, while roomMaxWidth and Height are how large they can be. connectRooms determines if the
-// algorithm should also attempt to connect the rooms using pathways between each room.
+// algorithm should also attempt to connect the rooms using pathways between each room. It returns the positions of each room
+// created.
 func (room *Room) GenerateRoomPlacer(fillValue, roomCount, roomMinWidth, roomMinHeight, roomMaxWidth, roomMaxHeight int, connectRooms bool) [][]int {
 
 	if room.CustomSeed {
@@ -336,7 +298,8 @@ func (room *Room) GenerateDrunkWalk(fillValue int, percentageFilled float32) {
 
 // DrawLine is used to draw a line from x, y, to x2, y2, placing the value fillValue in the cells between those points (including)
 // in those points themselves, as well. thickness controls how thick the line is. If stagger is on, then the line will stagger it's
-// vertical movement, allowing a 1-thickness line to actually be pass-able if an object was only able to move in cardinal directions.
+// vertical movement, allowing a 1-thickness line to actually be pass-able if an object was only able to move in cardinal directions
+// and the line had a diagonal slope.
 func (room *Room) DrawLine(x, y, x2, y2, fillValue, thickness int, stagger bool) {
 
 	dx := int(math.Abs(float64(x2 - x)))
@@ -617,9 +580,9 @@ func (selection Selection) ByPercentage(percentage float32) Selection {
 
 	cells := make([][]int, 0)
 
-	for i := 0; i < int(float32(selection.Count())*percentage); i++ {
+	for i := 0; i < int(float32(len(selection.Cells))*percentage); i++ {
 
-		c := selection.Cells[rand.Intn(selection.Count())]
+		c := selection.Cells[rand.Intn(len(selection.Cells))]
 
 		choseCell := false
 
@@ -642,8 +605,8 @@ func (selection Selection) ByPercentage(percentage float32) Selection {
 
 }
 
-// ByNeighbor selects the cells that have a value of cellValue that are surrounded at least by one neighbor with a value of
-// fromValue. If diagonals is true, then diagonals are also checked.
+// ByNeighbor selects the cells that are surrounded at least by minNeighborCount neighbors with a value of
+// neighborValue. If diagonals is true, then diagonals are also checked.
 func (selection Selection) ByNeighbor(neighborValue, minNeighborCount int, diagonals bool) Selection {
 
 	return selection.By(func(x, y int) bool {
@@ -685,8 +648,8 @@ func (selection Selection) ByNeighbor(neighborValue, minNeighborCount int, diago
 }
 
 // By simply takes a function that takes the X and Y values of each cell position contained in the Selection, and returns a
-// boolean to indicate whether to include that cell in the Selection or not. This allows you to make custom filtering functions
-// to filter down the cells in a Selection.
+// boolean to indicate whether to include that cell in the Selection or not. This allows you to easily make custom filtering
+// functions to filter down the cells in a Selection.
 func (selection Selection) By(filterFunc func(x, y int) bool) Selection {
 
 	cells := make([][]int, 0)
@@ -818,7 +781,7 @@ func (selection Selection) Invert() Selection {
 
 }
 
-// Contains returns if the specified cell is in the list of cells contained in the selection.
+// Contains returns a boolean indicating if the specified cell is in the list of cells contained in the selection.
 func (selection *Selection) Contains(x, y int) bool {
 	for _, c := range selection.Cells {
 		if c[0] == x && c[1] == y {
@@ -869,165 +832,10 @@ func (selection Selection) Degrade(from, to int) Selection {
 
 }
 
-// Count returns the number of cells in the Selection.
-func (selection Selection) Count() int {
-	return len(selection.Cells)
-}
-
-// func (room *Room) Combine(other *Room) *Room {
-
-// 	newRoom := NewRoom(room.Width+other.Width, room.Height+other.Height)
-
-// 	left := room
-// 	if other.X < room.X {
-// 		left = other
-// 	}
-
-// 	top := room
-// 	if other.Y < room.Y {
-// 		top = other
-// 	}
-
-// 	newRoom.X = left.X
-// 	newRoom.Y = top.Y
-
-// 	newRoom.Run(func(x, y int) int {
-
-// 		if room.IsInside(x, y) {
-// 			return room.Get(x-room.X, y-room.Y)
-// 		} else if other.IsInside(x, y) {
-// 			return other.Get(x-other.X, y-other.Y)
-// 		}
-
-// 		return 0
-
-// 	})
-
-// 	return newRoom
-
-// }
-
-// Split splits the Room into two different sub-rooms. vertical controls whether the split is vertical or horizontal, and
-// percentage is how "far" into the room the split should happen.
-// func (room *Room) Split(vertical bool, percentage float32) (*Room, *Room) {
-
-// 	var a, b *Room
-
-// 	if vertical {
-
-// 		rw := int(float32(room.Width) * percentage)
-
-// 		a = NewRoom(rw, room.Height)
-// 		a.X = room.X
-// 		a.Y = room.Y
-// 		a.Run(func(x, y int) int {
-// 			return room.Get(x, y)
-// 		})
-
-// 		b = NewRoom(room.Width-rw, room.Height)
-// 		b.X = room.X + rw
-// 		b.Y = room.Y
-// 		b.Run(func(x, y int) int {
-// 			return room.Get(x+rw, y)
-// 		})
-
-// 	} else {
-// 		rh := int(float32(room.Height) * percentage)
-// 		a = NewRoom(room.Width, rh)
-// 		a.X = room.X
-// 		a.Y = room.Y
-// 		a.Run(func(x, y int) int {
-// 			return room.Get(x, y)
-// 		})
-
-// 		b = NewRoom(room.Width, room.Height-rh)
-// 		b.X = room.X
-// 		b.Y = room.Y + rh
-// 		b.Run(func(x, y int) int {
-// 			return room.Get(x, y+rh)
-// 		})
-
-// 	}
-
-// 	return a, b
-
-// }
-
-// HalfOutline outlines the Room's edge on two sides with the value provided.
-// func (room *Room) HalfOutline(value int) *Room {
-
-// 	room.Run(func(x int, y int) int {
-// 		if y == 0 || x == 0 {
-// 			return value
-// 		}
-// 		return room.Get(x, y)
-// 	})
-
-// 	return room
-
-// }
-
-// const (
-// 	NeighborNone int = iota
-// 	NeighborRight
-// 	NeighborUp
-// 	NeighborLeft
-// 	NeighborDown
-// )
-
-// // NeighborDirection returns the direction that the other room is in if it's immediately a neighbor (on the calling Room's edge).
-// func (room *Room) NeighborDirection(other *Room) int {
-
-// 	if room == other {
-// 		return NeighborNone
-// 	}
-
-// 	if other.X == room.Right()+1 && other.Bottom() >= room.Y && other.Y <= room.Bottom() {
-// 		return NeighborRight
-// 	}
-
-// 	if other.Right() == room.X-1 && other.Bottom() >= room.Y && other.Y <= room.Bottom() {
-// 		return NeighborLeft
-// 	}
-
-// 	if other.Y == room.Bottom()+1 && other.Right() >= room.X && other.X <= room.Right() {
-// 		return NeighborDown
-// 	}
-
-// 	if other.Bottom() == room.Y-1 && other.Right() >= room.X && other.X <= room.Right() {
-// 		return NeighborUp
-// 	}
-
-// 	return NeighborNone
-
-// }
-
 func randBool() bool {
 	r := rand.Float32()
 	if r >= .5 {
 		return true
 	}
 	return false
-}
-
-func randChoiceInt(options ...int) int {
-	return options[rand.Intn(len(options))]
-}
-
-func RandomRoom(roomList []*Room) *Room {
-	if len(roomList) == 0 {
-		return nil
-	}
-	return roomList[rand.Intn(len(roomList))]
-}
-
-func contains(rooms []*Room, room *Room) bool {
-
-	for _, r := range rooms {
-		if r == room {
-			return true
-		}
-	}
-	return false
-
 }
