@@ -118,7 +118,7 @@ func DrawText(x, y int32, textLines ...string) {
 
 		_, _, w, h, _ := textSurface.Query()
 
-		textSurface.SetAlphaMod(100)
+		textSurface.SetAlphaMod(200)
 		renderer.Copy(textSurface, &sdl.Rect{X: 0, Y: 0, W: w, H: h}, &sdl.Rect{X: x, Y: sy, W: w, H: h})
 
 		sy += 16

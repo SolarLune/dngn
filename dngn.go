@@ -8,119 +8,287 @@ package dngn
 
 import (
 	"fmt"
+	"math"
 	"math/rand"
-	"strconv"
 	"time"
 )
 
-// Room represents a singular Room in the dungeon, or the root that all other Rooms are parented to.
-// X and Y are the position of the Room in the layout. This is basically only used for children Rooms where they can occupy a
-// space within a larger dungeon generation.
+// Room represents a dungeon map.
+// X and Y are the position of the Room. This is basically only used when checking to see if Rooms are neighbors.
 // Width and Height are the width and height of the Room in the layout. If the Room is a parent-less root Room, then this
 // determines the size of the overall Data structure backing the Room layout.
-// Children is a list of the Rooms the Room has as direct children.
-// Parent is the Room that this Room is a child of. If this is the root Room, then this would be nil.
 // Data is the core underlying data structure representing the dungeon. It's a 2D array of numbers. If the Room is a root Room,
 // then this will be a pointer to the array itself. If this room is a child, then this will be a pointer to the parent's
 // pointer. In other words, all Rooms point to the same Data array to simplify editing it.
-// Depth is the depth of the Room in the layout. A Room with no Parent will have a Depth of 1, and so on down the line.
 // Seed is the seed of the Room to use when doing random generation using the Generate* functions below.
 // CustomSeed indicates whether the Seed was customized - if not, then it will default to using the time of the system to have
 // random generation each time you use Generate* functions.
 type Room struct {
-	ID            string
-	X, Y          int
 	Width, Height int
-	Children      []*Room
-	Parent        *Room
 	Data          [][]int
-	Depth         int
-	Seed          int64
+	seed          int64
 	CustomSeed    bool
 }
 
-// NewRoom returns a new Room. x, y, w, and h get passed to the Room's X, Y, Width, and Height values. If this is the Root room,
-// then the X and Y values are essentially ignored. parent is the parent Room if this Room is to be a child Room. If it is a
-// root, then this should be nil.
-func NewRoom(x, y, w, h int, parent *Room) *Room {
+// NewRoom returns a new Room. X and Y are the position of the Room in the destination Map.
+func NewRoom(width, height int) *Room {
 
-	r := &Room{X: x, Y: y, Width: w, Height: h}
-	r.Children = make([]*Room, 0)
-	if parent != nil {
-		// This is a child Room, so its Data array can reference the Parent's Data array.
-		r.Parent = parent
-		r.Parent.Children = append(r.Parent.Children, r)
-
-		for i, child := range r.Parent.Children {
-			if child == r {
-				r.ID = r.Parent.ID + "." + strconv.Itoa(i)
-			}
+	r := &Room{Width: width, Height: height}
+	r.Data = [][]int{}
+	for y := 0; y < height; y++ {
+		r.Data = append(r.Data, []int{})
+		for x := 0; x < width; x++ {
+			r.Data[y] = append(r.Data[y], 0)
 		}
-
-		r.Data = r.Parent.Data
-		r.Depth = r.Parent.Depth + 1
-	} else {
-		// No parent, so this is a root Room that should "own the Data".
-		r.Data = [][]int{}
-		r.ID = "0"
-		for y := 0; y < h; y++ {
-			r.Data = append(r.Data, []int{})
-			for x := 0; x < w; x++ {
-				r.Data[y] = append(r.Data[y], 0)
-			}
-		}
-		r.Depth = 1
 	}
+
 	return r
 
 }
 
-// GenerateBSP generates a map in the bounds of the Room specified using BSPs (binary space partitions). It splits the Room up horizontall or vertically,
-// along a random line between 20% and 80% in, and then continues splitting it up into smaller chunks until the maximum depth specified is reached.
-// More depth means more complexity, generally, though it is random.
-// Link: http://www.roguebasin.com/index.php?title=Basic_BSP_Dungeon_generation
-func (room *Room) GenerateBSP(fillValue, maxDepth int) *Room {
+// GenerateBSP generates a map using BSP (binary space partitioning) generation, drawing lines of wallValue horizontally and
+// vertically across, partitioning the room into pieces. It also will place single cells of doorValue on the walls, creating
+// doorways. Link: http://www.roguebasin.com/index.php?title=Basic_BSP_Dungeon_generation
+func (room *Room) GenerateBSP(wallValue, doorValue, numSplits int) {
+
+	type subroom struct {
+		X, Y, W, H int
+	}
+
+	subMinSize := func(subroom subroom) int {
+		if subroom.W < subroom.H {
+			return subroom.W
+		}
+		return subroom.H
+	}
+
+	subSplit := func(parent subroom, vertical bool) (subroom, subroom, bool) {
+
+		splitPercentage := 0.2 + rand.Float32()*0.6
+
+		if vertical {
+
+			splitCX := int(float32(parent.W) * splitPercentage)
+			splitCX2 := parent.W - splitCX
+			a, b := subroom{parent.X, parent.Y, splitCX, parent.H}, subroom{parent.X + splitCX, parent.Y, splitCX2, parent.H}
+
+			if subMinSize(a) <= 2 || subMinSize(b) <= 2 {
+				return a, b, false
+			}
+
+			// Line is attempting to start on a door
+			if room.Get(parent.X+splitCX, parent.Y) == doorValue || room.Get(parent.X+splitCX, parent.Y+parent.H) == doorValue {
+				return a, b, false
+			}
+
+			room.DrawLine(parent.X+splitCX, parent.Y+1, parent.X+splitCX, parent.Y+parent.H-1, wallValue, 1, false)
+
+			// Place door
+			for i := 0; i < 100; i++ {
+				ry := parent.Y + 1 + rand.Intn(parent.H-1)
+				if room.Get(parent.X+splitCX-1, ry) == wallValue || room.Get(parent.X+splitCX+1, ry) == wallValue {
+					continue
+				}
+				room.Set(parent.X+splitCX, ry, doorValue)
+				fmt.Println(parent.X+splitCX, ry)
+				break
+			}
+
+			return a, b, true
+		}
+
+		splitCY := int(float32(parent.H) * splitPercentage)
+		splitCY2 := parent.H - splitCY
+		a, b := subroom{parent.X, parent.Y, parent.W, splitCY}, subroom{parent.X, parent.Y + splitCY, parent.W, splitCY2}
+
+		if subMinSize(a) <= 2 || subMinSize(b) <= 2 {
+			return a, b, false
+		}
+
+		// Line is attempting to start on a door
+		if room.Get(parent.X, parent.Y+splitCY) == doorValue || room.Get(parent.X+parent.W, parent.Y+splitCY) == doorValue {
+			return a, b, false
+		}
+
+		room.DrawLine(parent.X+1, parent.Y+splitCY, parent.X+parent.W-1, parent.Y+splitCY, wallValue, 1, false)
+
+		for i := 0; i < 100; i++ {
+			rx := parent.X + 1 + rand.Intn(parent.W-1)
+			if room.Get(rx, parent.Y+splitCY-1) == wallValue || room.Get(rx, parent.Y+splitCY+1) == wallValue {
+				continue
+			}
+			room.Set(rx, parent.Y+splitCY, doorValue)
+			break
+		}
+
+		// for i := 0; i < 100; i++ {
+		// 	rY := parent.Y + rand.Intn(parent.H)
+		// 	if room.Get(parent.X-1, rY) == wallValue || room.Get(parent.X+1, rY) == wallValue {
+		// 		continue
+		// 	}
+		// 	room.Set(parent.X, rY, doorValue)
+		// 	break
+		// }
+
+		return a, b, true
+
+	}
+
+	rooms := []subroom{subroom{0, 0, room.Width, room.Height}}
 
 	if room.CustomSeed {
-		rand.Seed(room.Seed)
+		rand.Seed(room.seed)
 	} else {
 		rand.Seed(time.Now().UnixNano())
 	}
 
+	splitCount := 0
+
+	i := 0
 	for true {
 
-		for _, l := range room.Leaves() {
-			l.Split(randBool(), 0.2+rand.Float32()*.6)
-			if l.Children[0].MinimumSize() <= 2 || l.Children[1].MinimumSize() <= 2 {
-				l.ClearChildren()
-				continue
-			}
+		splitChoice := rooms[rand.Intn(len(rooms))]
+
+		// Do the split
+
+		a, b, success := subSplit(splitChoice, randBool())
+
+		i++
+
+		if i >= numSplits*10 { // Assume it's done and would just hang the system
+			break
 		}
 
-		if room.MaxDepth() >= maxDepth {
+		if !success {
+			continue
+		} else {
+
+			rooms = append(rooms, a, b)
+
+			for i, r := range rooms {
+				if r == splitChoice {
+					rooms = append(rooms[:i], rooms[i+1:]...)
+					break
+				}
+			}
+
+		}
+
+		splitCount++
+
+		if splitCount >= numSplits {
 			break
 		}
 
 	}
 
-	room.Border(fillValue)
+	// for _, r := range rooms {
 
-	return room
+	// 	// cy := r.Y + 1 + int(float32(r.H-1)*rand.Float32())
+
+	// 	// if room.Get(r.X-1, cy) == 0 {
+	// 	// 	room.Set(r.X, cy, doorValue)
+	// 	// }
+
+	// 	cy := r.Y + 1 + int(float32(r.H-1)*rand.Float32())
+
+	// 	if room.Get(r.X+r.W+1, cy) == 0 {
+	// 		room.Set(r.X+r.W, cy, doorValue)
+	// 	}
+
+	// 	// cx := r.X + 1 + int(float32(r.W-1)*rand.Float32())
+
+	// 	// if room.Get(cx, r.Y-1) == 0 {
+	// 	// 	room.Set(cx, r.Y, doorValue)
+	// 	// }
+
+	// 	// cx := r.X + 1 + int(float32(r.W-1)*rand.Float32())
+
+	// 	// if room.Get(cx, r.Y+r.H) == 0 {
+	// 	// 	room.Set(cx, r.Y+r.H-1, doorValue)
+	// 	// }
+
+	// }
 
 }
 
-// GenerateDrunkWalk generates a map in the bounds of the Room specified using drunk walking.
-// Link: http://www.roguebasin.com/index.php?title=Random_Walk_Cave_Generation
-func (room *Room) GenerateDrunkWalk(fillValue int, percentageFilled float32) *Room {
+// GenerateRoomPlacer generates a map using random room placement. roomCount is how many rooms to place, roomMinWidth and Height
+// are how small they can be, minimum, while roomMaxWidth and Height are how large they can be. connectRooms determines if the
+// algorithm should also attempt to connect the rooms using pathways between each room.
+func (room *Room) GenerateRoomPlacer(fillValue, roomCount, roomMinWidth, roomMinHeight, roomMaxWidth, roomMaxHeight int, connectRooms bool) [][]int {
 
 	if room.CustomSeed {
-		rand.Seed(room.Seed)
+		rand.Seed(room.seed)
 	} else {
 		rand.Seed(time.Now().UnixNano())
 	}
 
-	sx := room.X + rand.Intn(room.Width)
-	sy := room.Y + rand.Intn(room.Height)
+	roomPositions := make([][]int, 0)
+
+	for i := 0; i < roomCount; i++ {
+
+		// roomSize := float64(2 + rand.Intn(2))
+
+		sx := rand.Intn(room.Width)
+		sy := rand.Intn(room.Height)
+
+		roomPositions = append(roomPositions, []int{sx, sy})
+
+		roomW := roomMinWidth + rand.Intn(roomMaxWidth-roomMinWidth)
+		roomH := roomMinHeight + rand.Intn(roomMaxHeight-roomMinHeight)
+
+		drawRoom := func(x, y int) bool {
+			dx := int(math.Abs(float64(sx) - float64(x)))
+			dy := int(math.Abs(float64(sy) - float64(y)))
+			if dx < roomW && dy < roomH {
+				room.Set(x, y, fillValue)
+			}
+			return true
+		}
+
+		room.Select().By(drawRoom)
+
+	}
+
+	if connectRooms {
+
+		for p := 0; p < len(roomPositions); p++ {
+
+			if p < len(roomPositions)-1 {
+
+				x := roomPositions[p][0]
+				y := roomPositions[p][1]
+
+				x2 := roomPositions[p+1][0]
+				y2 := roomPositions[p+1][1]
+
+				room.DrawLine(x, y, x2, y2, 0, 1, true)
+
+			}
+
+		}
+
+	}
+
+	return roomPositions
+
+}
+
+// GenerateDrunkWalk generates a map in the bounds of the Room specified using drunk walking. It will pick a random point in the
+// Room and begin walking around at random, placing fillValue in the Room, until at least percentageFilled (0.0 - 1.0) of the Room
+// is filled. Note that it only counts values placed in the cell, not instances where it moves over a cell that already has the
+// value being placed.
+// Link: http://www.roguebasin.com/index.php?title=Random_Walk_Cave_Generation
+func (room *Room) GenerateDrunkWalk(fillValue int, percentageFilled float32) {
+
+	if room.CustomSeed {
+		rand.Seed(room.seed)
+	} else {
+		rand.Seed(time.Now().UnixNano())
+	}
+
+	sx := rand.Intn(room.Width)
+	sy := rand.Intn(room.Height)
 	fillCount := float32(0)
 
 	totalArea := float32(room.Area())
@@ -146,16 +314,16 @@ func (room *Room) GenerateDrunkWalk(fillValue int, percentageFilled float32) *Ro
 			sy--
 		}
 
-		if sx < room.X {
-			sx = room.X
-		} else if sx >= room.X+room.Width {
-			sx = room.X + room.Width - 1
+		if sx < 0 {
+			sx = 0
+		} else if sx >= room.Width {
+			sx = room.Width - 1
 		}
 
-		if sy < room.Y {
-			sy = room.Y
-		} else if sy >= room.Y+room.Height {
-			sy = room.Y + room.Height - 1
+		if sy < 0 {
+			sy = 0
+		} else if sy >= room.Height {
+			sy = room.Height - 1
 		}
 
 		if fillCount/totalArea >= percentageFilled {
@@ -164,26 +332,104 @@ func (room *Room) GenerateDrunkWalk(fillValue int, percentageFilled float32) *Ro
 
 	}
 
-	return room
+}
+
+// DrawLine is used to draw a line from x, y, to x2, y2, placing the value fillValue in the cells between those points (including)
+// in those points themselves, as well. thickness controls how thick the line is. If stagger is on, then the line will stagger it's
+// vertical movement, allowing a 1-thickness line to actually be pass-able if an object was only able to move in cardinal directions.
+func (room *Room) DrawLine(x, y, x2, y2, fillValue, thickness int, stagger bool) {
+
+	dx := int(math.Abs(float64(x2 - x)))
+	dy := int(math.Abs(float64(y2 - y)))
+	slope := float32(0)
+	xAxis := true
+
+	if dx != 0 {
+		slope = float32(dy) / float32(dx)
+	}
+	length := dx
+
+	if dy > dx {
+		xAxis = false
+		if dy != 0 {
+			slope = float32(dx) / float32(dy)
+		}
+		length = dy
+	}
+
+	sx := float32(x)
+	sy := float32(y)
+
+	set := func(x, y int) {
+		for fx := 0; fx < thickness; fx++ {
+			for fy := 0; fy < thickness; fy++ {
+				room.Set(x+fx-thickness/2, y+fy-thickness/2, fillValue)
+			}
+		}
+	}
+
+	for c := 0; c < length+1; c++ {
+
+		set(int(math.Round(float64(sx))), int(math.Round(float64(sy))))
+
+		mx := int(math.Round(float64(sx)))
+
+		if xAxis {
+			if x2 > x {
+				sx++
+			} else {
+				sx--
+			}
+			if y2 > y {
+				sy += slope
+			} else {
+				sy -= slope
+			}
+		} else {
+			if y2 > y {
+				sy++
+			} else {
+				sy--
+			}
+			if x2 > x {
+				sx += slope
+			} else {
+				sx -= slope
+			}
+		}
+
+		if stagger {
+			set(mx, int(math.Round(float64(sy))))
+		}
+
+	}
 
 }
 
 // Set sets the value provided in the Room's Data. A convenience function stand-in for "room.Data[y][x] = value".
 func (room *Room) Set(x, y, value int) {
+
+	if x < 0 {
+		x = 0
+	} else if x > room.Width-1 {
+		x = room.Width - 1
+	}
+
+	if y < 0 {
+		y = 0
+	} else if y > room.Height-1 {
+		y = room.Height - 1
+	}
+
 	room.Data[y][x] = value
+
 }
 
 // Get returns the value provided in the Room's Data. A convenience function stand-in for "room.Data[y][x]".
 func (room *Room) Get(x, y int) int {
-	if x < 0 {
-		x = 0
-	} else if x >= room.X+room.Width {
-		x = room.Width - 1
-	}
-	if y < 0 {
-		y = 0
-	} else if y >= room.Y+room.Height {
-		y = room.Height - 1
+
+	if x < 0 || x >= room.Width || y < 0 || y >= room.Height {
+		return 0
 	}
 
 	return int(room.Data[y][x])
@@ -192,7 +438,7 @@ func (room *Room) Get(x, y int) int {
 // SetSeed sets a custom seed for random generation.
 func (room *Room) SetSeed(seed int64) {
 	room.CustomSeed = true
-	room.Seed = seed
+	room.seed = seed
 }
 
 // ClearSeed clears a custom seed set for random generation. When using a clear seed, random generation functions will use the
@@ -201,327 +447,40 @@ func (room *Room) ClearSeed() {
 	room.CustomSeed = false
 }
 
-// IsIn returns if the specified position is in the Room.
-func (room *Room) IsIn(x, y int) bool {
-	return x >= room.X && x < room.X+room.Width && y >= room.Y && y < room.Y+room.Height
-}
-
 // Center returns the center position of the Room.
 func (room *Room) Center() (int, int) {
-	return room.X + room.Width/2, room.Y + room.Height/2
+	return room.Width / 2, room.Height / 2
 }
 
-// OpenInto sets the value specified at a random position on the border between the two Rooms if they are neighbors, creating
-// a doorway.
-func (room *Room) OpenInto(other *Room, toValue int) bool {
+// Resize resizes the room to be of the width and height provided. Note that resizing to a smaller Room is destructive (and so,
+// data will be lost if resizing to a smaller Room).
+func (room *Room) Resize(width, height int) *Room {
 
-	doorwayChoices := make([]int, 0)
+	room.Width = width
+	room.Height = height
 
-	room.Run(func(x, y int) int {
+	data := make([][]int, 0)
 
-		if y > room.Y && y < room.Y+room.Height-1 && y > other.Y && y < other.Y+room.Height-1 {
+	for y := 0; y < height; y++ {
 
-			if other.IsIn(x+1, y) { // Right edge of this room, right neighbor's the other Room
-				doorwayChoices = append(doorwayChoices, x, y, x+1, y)
-			}
-			if other.IsIn(x-1, y) {
-				doorwayChoices = append(doorwayChoices, x, y, x-1, y)
-			}
+		data = append(data, []int{})
 
-		}
+		for x := 0; x < width; x++ {
 
-		if x > room.X && x < room.X+room.Width-1 && x > other.X && x < other.X+room.Width-1 {
-
-			if other.IsIn(x, y+1) {
-				doorwayChoices = append(doorwayChoices, x, y, x, y+1)
-			}
-			if other.IsIn(x, y-1) {
-				doorwayChoices = append(doorwayChoices, x, y, x, y-1)
+			if len(room.Data) > y && len(room.Data[y]) > x {
+				data[y] = append(data[y], room.Get(x, y))
+			} else {
+				data[y] = append(data[y], 0)
 			}
 
 		}
 
-		return room.Get(x, y)
-	})
-
-	if len(doorwayChoices) > 0 {
-
-		ci := rand.Intn(len(doorwayChoices)/4) * 4
-
-		room.Set(doorwayChoices[ci], doorwayChoices[ci+1], toValue)
-		other.Set(doorwayChoices[ci+2], doorwayChoices[ci+3], toValue)
-
-		return true
-
 	}
 
-	return false
-
-}
-
-// OpenIntoNeighbors automatically loops through all leaf recursive children to open a doorway between the border of the child
-// and its neighbors.
-func (room *Room) OpenIntoNeighbors(value int) {
-
-	connected := make([]*Room, 0)
-
-	for _, leaf := range room.Leaves() {
-
-		for _, neighbor := range leaf.Neighbors() {
-
-			if neighbor.IsLeaf() {
-
-				if contains(connected, neighbor) {
-					continue
-				}
-
-				leaf.OpenInto(neighbor, value)
-
-			}
-
-		}
-
-		connected = append(connected, leaf)
-
-	}
-
-}
-
-// Run runs the provided function on each cell in the Room's Data array. The function should take the X and Y position of each
-// cell in the Room's Data array, and returns an int to put in the array in that position.
-func (room *Room) Run(function func(x, y int) int) *Room {
-
-	for y := room.Y; y < room.Y+room.Height; y++ {
-		for x := room.X; x < room.X+room.Width; x++ {
-			room.Set(x, y, function(x, y))
-		}
-	}
-
-	for _, sub := range room.Children { // Make this optional / changeable?
-		sub.Run(function)
-	}
+	room.Data = data
 
 	return room
 
-}
-
-// Fill fills the Room's Data array with the value provided.
-func (room *Room) Fill(value int) *Room {
-	room.Run(func(x int, y int) int {
-		return value
-	})
-	return room
-}
-
-// Split splits the Room into two different sub-rooms. vertical controls whether the split is vertical or horizontal, and
-// percentage is how "far" into the room the split should happen.
-func (room *Room) Split(vertical bool, percentage float32) *Room {
-
-	room.ClearChildren()
-
-	if vertical {
-		rWidth := int(float32(room.Width) * percentage)
-		NewRoom(room.X, room.Y, rWidth, room.Height, room)
-		NewRoom(room.X+rWidth, room.Y, room.Width-rWidth, room.Height, room)
-	} else {
-		rHeight := int(float32(room.Height) * percentage)
-		NewRoom(room.X, room.Y, room.Width, rHeight, room)
-		NewRoom(room.X, room.Y+rHeight, room.Width, room.Height-rHeight, room)
-	}
-
-	return room
-
-}
-
-// ClearChildren clears the room's Children list, making it a leaf Room.
-func (room *Room) ClearChildren() {
-	room.Children = make([]*Room, 0)
-}
-
-// Border outlines all children leaf rooms with the value provided on just two sides, creating a border between them.
-func (room *Room) Border(value int) *Room {
-
-	for _, leaf := range room.Leaves() {
-		leaf.Run(func(x int, y int) int {
-			if (x >= leaf.X && x <= leaf.X+leaf.Width) && (y == leaf.Y) || (y >= leaf.Y && y <= leaf.Y+leaf.Height) && (x == leaf.X) {
-				return value
-			}
-			return leaf.Get(x, y)
-		})
-	}
-
-	return room
-
-}
-
-// Outline outlines the Room's edge on all four sides with the value provided.
-func (room *Room) Outline(value int) *Room {
-
-	room.Run(func(x int, y int) int {
-		if (x >= room.X && x <= room.X+room.Width) && (y == room.Y) || (y >= room.Y && y <= room.Y+room.Height) && (x == room.X) ||
-			(x >= room.X && x <= room.X+room.Width) && (y == room.Y+room.Height-1) || (y >= room.Y && y <= room.Y+room.Height) && (x == room.X+room.Width-1) {
-			return value
-		}
-		return room.Get(x, y)
-	})
-
-	return room
-
-}
-
-// Degrade applies a formula that randomly degrades the cells in the room that have the from value to the to value if their
-// neighbors have the to value. The more neighbors that have the to value, the more likely the cell will degrade.
-func (room *Room) Degrade(from, to int) *Room {
-
-	// Basically, if a cell has 1 neighbor being the value, 15% chance to turn into the value, 2 sides = 25%, 3 sides = 50%
-
-	room.Run(func(x, y int) int {
-		c := room.Get(x, y)
-		multiplier := 0
-		if c == from {
-			if room.Get(x-1, y) == to {
-				multiplier++
-			}
-			if room.Get(x+1, y) == to {
-				multiplier++
-			}
-			if room.Get(x, y-1) == to {
-				multiplier++
-			}
-			if room.Get(x, y+1) == to {
-				multiplier++
-			}
-		}
-
-		if rand.Float32() <= float32(multiplier)*.025 {
-			c = to
-		}
-		return c
-	})
-
-	return room
-
-}
-
-// Remap changes all values from the "from" value specified to the "to" value specified.
-func (room *Room) Remap(from, to int) *Room {
-
-	room.Run(func(x, y int) int {
-
-		cv := room.Get(x, y)
-
-		if cv == from {
-			return to
-		}
-
-		return cv
-
-	})
-
-	return room
-
-}
-
-// Right returns the right edge of the room (i.e. room.X + room.Width).
-func (room *Room) Right() int {
-	return room.X + room.Width - 1
-}
-
-// Bottom returns the bottom edge of the room (i.e. room.Y + room.Height).
-func (room *Room) Bottom() int {
-	return room.Y + room.Height - 1
-}
-
-// Neighbors returns all Rooms that are neighbors (share a border) with the calling Room. Note that these include non-leaf
-// Rooms, as well, so be aware of that.
-func (room *Room) Neighbors() []*Room {
-
-	neighbors := make([]*Room, 0)
-
-	if room.Parent == nil {
-		return neighbors
-	}
-
-	for _, r := range room.GetRoot().ChildrenRecursive() {
-
-		if r == room {
-			continue
-		}
-
-		if r.X == room.Right()+1 && r.Bottom() >= room.Y && r.Y <= room.Bottom() {
-			neighbors = append(neighbors, r)
-			continue
-		}
-
-		if r.Right() == room.X-1 && r.Bottom() >= room.Y && r.Y <= room.Bottom() {
-			neighbors = append(neighbors, r)
-			continue
-		}
-
-		if r.Y == room.Bottom()+1 && r.Right() >= room.X && r.X <= room.Right() {
-			neighbors = append(neighbors, r)
-			continue
-		}
-
-		if r.Bottom() == room.Y-1 && r.Right() >= room.X && r.X <= room.Right() {
-			neighbors = append(neighbors, r)
-			continue
-		}
-
-	}
-
-	return neighbors
-
-}
-
-// Sibling returns the sibling Room in a BSP generation map (i.e. the "other" child of the Room's parent).
-func (room *Room) Sibling() *Room {
-	var other *Room
-	if room.Parent != nil {
-		other = room.Parent.Children[0]
-		if other == room {
-			other = room.Parent.Children[1]
-		}
-	}
-	return other
-}
-
-// Find allows you to easily walk down a Room's list of children to get to a specific node / Room. Each index passed is used to
-// get the calling Room's children, and continues down until Find get to the end of the indices. In other words, it
-// turns "room.Children[0].Children[1].Children[0].Children[0].Fill(1)" into "room.Find(0, 1, 0, 0).Fill(1)". An index of -1
-// can be used to go back up to a parent.
-func (room *Room) Find(indices ...int) *Room {
-
-	current := room
-
-	for _, i := range indices {
-		if i >= 0 {
-			current = current.Children[i]
-		} else {
-			current = current.Parent
-		}
-	}
-
-	return current
-
-}
-
-// IsLeaf returns if the Room is a leaf room (a room that has no children Rooms).
-func (room *Room) IsLeaf() bool {
-	return len(room.Children) == 0
-}
-
-// GetRoot walks up the Room's parents recursively until it can't any longer, returning the root Room.
-func (room *Room) GetRoot() *Room {
-	base := room
-	for true {
-		if base.Parent != nil {
-			base = base.Parent
-		} else {
-			break
-		}
-	}
-	return base
 }
 
 // Area returns the overall size of the Room by multiplying the width by the height.
@@ -537,87 +496,11 @@ func (room *Room) MinimumSize() int {
 	return room.Height
 }
 
-// MaxDepth returns the maximum overall depth of the map, starting from the referenced room and going down its Children.
-func (room *Room) MaxDepth() int {
-
-	depth := 0
-
-	for _, node := range room.ChildrenRecursive() {
-
-		if node.Depth > depth {
-			depth = node.Depth
-		}
-
-	}
-
-	return depth - (room.Depth + 1)
-
-}
-
-// ChildrenRecursive returns a list of all rooms that are children recursively going down the map.
-func (room *Room) ChildrenRecursive() []*Room {
-
-	rooms := make([]*Room, 0)
-	rooms = append(rooms, room)
-
-	checks := make([]*Room, 0)
-	checks = append(checks, room)
-
-	for true {
-
-		for _, r := range checks {
-
-			checks = checks[1:]
-			checks = append(checks, r.Children...)
-
-			if !contains(rooms, r) {
-				rooms = append(rooms, r)
-			}
-
-		}
-		if len(checks) == 0 {
-			break
-		}
-	}
-
-	return rooms
-}
-
-// Leaves returns a list of the calling Room's recursive children that are leaf rooms (Rooms that have no children rooms).
-func (room *Room) Leaves() []*Room {
-
-	leaves := make([]*Room, 0)
-
-	for _, r := range room.ChildrenRecursive() {
-
-		if len(r.Children) == 0 {
-			leaves = append(leaves, r)
-		}
-
-	}
-
-	return leaves
-}
-
 // DataToString returns the underlying data of the overall Room layout in an easily understood visual format.
 // 0's turn into blank spaces when using DataToString, and the column is shown at the left of the map.
 func (room *Room) DataToString() string {
 
-	s := ""
-
-	// s += "   "
-	// for x := 0; x < len(room.Data[0]); x++ {
-	// 	if x%5 == 0 || x == len(room.Data[0])-1 {
-	// 		s += fmt.Sprintf("%3d", x)
-	// 		// s += strconv.Itoa(x) + " "
-	// 	} else {
-
-	// 		s += "  "
-	// 	}
-	// }
-	// s += "\n"
-
-	s += "\n"
+	s := fmt.Sprintf("  W:%d H:%d\n", room.Width, room.Height)
 
 	for y := 0; y < len(room.Data); y++ {
 		s += fmt.Sprintf("%3d  |", y)
@@ -635,6 +518,483 @@ func (room *Room) DataToString() string {
 
 }
 
+// Select generates a Selection containing all of the cells of the Room.
+func (room *Room) Select() Selection {
+
+	cells := make([][]int, 0)
+
+	for y := 0; y < room.Height; y++ {
+		for x := 0; x < room.Width; x++ {
+			cells = append(cells, []int{x, y})
+		}
+	}
+
+	return Selection{Room: room, Cells: cells}
+
+}
+
+// SelectContiguous generates a Selection containing all contiguous (connected) cells featuring the same value as the cell in
+// the position provided.
+func (room *Room) SelectContiguous(x, y int) Selection {
+
+	cells := make([][]int, 0)
+
+	toBeChecked := make([][]int, 0)
+	toBeChecked = append(toBeChecked, []int{x, y})
+
+	conValue := room.Get(x, y)
+
+	checked := make([][]int, 0)
+
+	hasBeenChecked := func(x, y int) bool {
+
+		for _, pos := range checked {
+			if pos[0] == x && pos[1] == y {
+				return true
+			}
+		}
+		return false
+
+	}
+
+	for true {
+
+		sx, sy := toBeChecked[0][0], toBeChecked[0][1]
+
+		if !hasBeenChecked(sx, sy) {
+
+			checked = append(checked, []int{sx, sy})
+			cells = append(cells, []int{sx, sy})
+
+			if sx > 0 && room.Get(sx-1, sy) == conValue && !hasBeenChecked(sx-1, sy) {
+				toBeChecked = append(toBeChecked, []int{sx - 1, sy})
+			}
+			if sx < room.Width && room.Get(sx+1, sy) == conValue && !hasBeenChecked(sx+1, sy) {
+				toBeChecked = append(toBeChecked, []int{sx + 1, sy})
+			}
+			if sy > 0 && room.Get(sx, sy-1) == conValue && !hasBeenChecked(sx, sy-1) {
+				toBeChecked = append(toBeChecked, []int{sx, sy - 1})
+			}
+			if sy < room.Height && room.Get(sx, sy+1) == conValue && !hasBeenChecked(sx, sy+1) {
+				toBeChecked = append(toBeChecked, []int{sx, sy + 1})
+			}
+
+		}
+
+		toBeChecked = toBeChecked[1:]
+
+		if len(toBeChecked) == 0 {
+			break
+		}
+
+	}
+
+	return Selection{Room: room, Cells: cells}
+
+}
+
+// A Selection represents a selection of cells in the Room's data array, and can be filtered down and manipulated using the
+// functions on the Selection struct.
+type Selection struct {
+	Room  *Room
+	Cells [][]int
+}
+
+// ByValue filters the Selection down to the cells that have the value provided.
+func (selection Selection) ByValue(value int) Selection {
+
+	return selection.By(func(x, y int) bool {
+		if selection.Room.Get(x, y) == value {
+			return true
+		}
+		return false
+	})
+
+}
+
+// ByChance filters the Selection down using a percentage chance to select Cells. Note that to be simple implementation-wise,
+// this is just chance-based, not random percentage-based. For example, if the function is run with a percentage of 0.5,
+// or 50%, it won't randomly select 50% of the cells in the Selection, but rather randomly either select or reject each cell,
+// given a 50% chance), until it runs through all cells, or has a Selection of 50% in count. So the end result could
+// theoretically contain no Cells, but in practice, it is essentially infinitely more likely to be very close to the
+// percentage provided. Naturally, this likelihood rises with larger Selections.
+func (selection Selection) ByChance(percentage float32) Selection {
+
+	current := 0
+
+	return selection.By(func(x, y int) bool {
+		if current >= int(float32(selection.Count())*percentage) {
+			return false
+		}
+		if rand.Float32() <= percentage {
+			current++
+			return true
+		}
+		return false
+	})
+
+}
+
+// ByNeighbor selects the cells that have a value of cellValue that are surrounded at least by one neighbor with a value of
+// fromValue. If diagonals is true, then diagonals are also checked.
+func (selection Selection) ByNeighbor(neighborValue, minNeighborCount int, diagonals bool) Selection {
+
+	return selection.By(func(x, y int) bool {
+
+		n := 0
+
+		if selection.Room.Get(x-1, y) == neighborValue {
+			n++
+		}
+		if selection.Room.Get(x+1, y) == neighborValue {
+			n++
+		}
+		if selection.Room.Get(x, y-1) == neighborValue {
+			n++
+		}
+		if selection.Room.Get(x, y+1) == neighborValue {
+			n++
+		}
+
+		if diagonals {
+			if selection.Room.Get(x-1, y-1) == neighborValue {
+				n++
+			}
+			if selection.Room.Get(x+1, y-1) == neighborValue {
+				n++
+			}
+			if selection.Room.Get(x-1, y+1) == neighborValue {
+				n++
+			}
+			if selection.Room.Get(x+1, y+1) == neighborValue {
+				n++
+			}
+		}
+
+		return n >= minNeighborCount
+
+	})
+
+}
+
+// By simply takes a function that takes the X and Y values of each cell position contained in the Selection, and returns a
+// boolean to indicate whether to include that cell in the Selection or not. This allows you to make custom filtering functions
+// to filter down the cells in a Selection.
+func (selection Selection) By(filterFunc func(x, y int) bool) Selection {
+
+	cells := make([][]int, 0)
+
+	for _, c := range selection.Cells {
+		if filterFunc(c[0], c[1]) {
+			cells = append(cells, []int{c[0], c[1]})
+		}
+	}
+
+	selection.Cells = cells
+
+	return selection
+
+}
+
+// Expand expands the selection outwards by the distance value provided. Diagonal indicates if the expansion should happen
+// diagonally as well, or just on the cardinal 4 directions.
+func (selection Selection) Expand(distance int, diagonal bool) Selection {
+
+	cells := make([][]int, 0)
+
+	inCells := func(x, y int) bool {
+		for _, c := range cells {
+			if x == c[0] && y == c[1] {
+				return true
+			}
+		}
+		return false
+	}
+
+	for _, cell := range selection.Cells {
+		x, y := cell[0], cell[1]
+		if !inCells(x, y) {
+			cells = append(cells, []int{x, y})
+		}
+
+		if !inCells(x-distance, y) {
+			cells = append(cells, []int{x - distance, y})
+		}
+		if !inCells(x+distance, y) {
+			cells = append(cells, []int{x + distance, y})
+		}
+		if !inCells(x, y-distance) {
+			cells = append(cells, []int{x, y - distance})
+		}
+		if !inCells(x, y+distance) {
+			cells = append(cells, []int{x, y + distance})
+		}
+		if diagonal {
+			if !inCells(x-distance, y-distance) {
+				cells = append(cells, []int{x - distance, y - distance})
+			}
+			if !inCells(x+distance, y+distance) {
+				cells = append(cells, []int{x + distance, y + distance})
+			}
+			if !inCells(x+distance, y-distance) {
+				cells = append(cells, []int{x + distance, y - distance})
+			}
+			if !inCells(x-distance, y+distance) {
+				cells = append(cells, []int{x - distance, y + distance})
+			}
+		}
+	}
+
+	selection.Cells = cells
+
+	return selection
+
+}
+
+// Shrink shrinks the selection by one.
+func (selection Selection) Shrink(diagonal bool) Selection {
+
+	type pair struct {
+		X, Y int
+	}
+
+	counts := make(map[pair]int, 0)
+
+	countCell := func(pos pair) {
+		_, ok := counts[pos]
+		if !ok {
+			counts[pos] = 0
+		}
+		counts[pos]++
+	}
+
+	for _, c := range selection.Cells {
+
+		x, y := c[0], c[1]
+
+		countCell(pair{x + 1, y})
+		countCell(pair{x - 1, y})
+		countCell(pair{x, y + 1})
+		countCell(pair{x, y - 1})
+		if diagonal {
+			countCell(pair{x + 1, y + 1})
+			countCell(pair{x - 1, y - 1})
+			countCell(pair{x - 1, y + 1})
+			countCell(pair{x + 1, y - 1})
+		}
+
+	}
+
+	p := pair{}
+
+	if diagonal {
+		return selection.By(func(x, y int) bool {
+			p.X, p.Y = x, y
+			return counts[p] == 8
+		})
+	}
+	return selection.By(func(x, y int) bool {
+		p.X, p.Y = x, y
+		return counts[p] == 4
+	})
+
+}
+
+// Invert inverts the selection (selects all non-selected cells from the Selection's source Room).
+func (selection Selection) Invert() Selection {
+
+	sel := selection.Room.Select()
+
+	return sel.By(func(x, y int) bool {
+		return !selection.Contains(x, y)
+	})
+
+}
+
+// Contains returns if the specified cell is in the list of cells contained in the selection.
+func (selection *Selection) Contains(x, y int) bool {
+	for _, c := range selection.Cells {
+		if c[0] == x && c[1] == y {
+			return true
+		}
+	}
+	return false
+}
+
+// Fill fills the cells in the Selection with the value provided.
+func (selection Selection) Fill(value int) Selection {
+	return selection.By(func(x, y int) bool {
+		selection.Room.Set(x, y, value)
+		return true
+	})
+}
+
+// Degrade applies a formula that randomly degrades the cells in the room that have the from value to the to value if their
+// neighbors have the to value. The more neighbors that have the to value, the more likely the cell will degrade.
+func (selection Selection) Degrade(from, to int) Selection {
+
+	// Basically, if a cell has 1 neighbor being the value, 15% chance to turn into the value, 2 sides = 25%, 3 sides = 50%
+
+	return selection.By(func(x, y int) bool {
+		c := selection.Room.Get(x, y)
+		multiplier := 0
+		if c == from {
+			if selection.Room.Get(x-1, y) == to {
+				multiplier++
+			}
+			if selection.Room.Get(x+1, y) == to {
+				multiplier++
+			}
+			if selection.Room.Get(x, y-1) == to {
+				multiplier++
+			}
+			if selection.Room.Get(x, y+1) == to {
+				multiplier++
+			}
+		}
+
+		if rand.Float32() <= float32(multiplier)*.025 {
+			c = to
+		}
+		selection.Room.Set(x, y, c)
+		return true
+	})
+
+}
+
+// Count returns the number of cells in the Selection.
+func (selection *Selection) Count() int {
+	return len(selection.Cells)
+}
+
+// func (room *Room) Combine(other *Room) *Room {
+
+// 	newRoom := NewRoom(room.Width+other.Width, room.Height+other.Height)
+
+// 	left := room
+// 	if other.X < room.X {
+// 		left = other
+// 	}
+
+// 	top := room
+// 	if other.Y < room.Y {
+// 		top = other
+// 	}
+
+// 	newRoom.X = left.X
+// 	newRoom.Y = top.Y
+
+// 	newRoom.Run(func(x, y int) int {
+
+// 		if room.IsInside(x, y) {
+// 			return room.Get(x-room.X, y-room.Y)
+// 		} else if other.IsInside(x, y) {
+// 			return other.Get(x-other.X, y-other.Y)
+// 		}
+
+// 		return 0
+
+// 	})
+
+// 	return newRoom
+
+// }
+
+// Split splits the Room into two different sub-rooms. vertical controls whether the split is vertical or horizontal, and
+// percentage is how "far" into the room the split should happen.
+// func (room *Room) Split(vertical bool, percentage float32) (*Room, *Room) {
+
+// 	var a, b *Room
+
+// 	if vertical {
+
+// 		rw := int(float32(room.Width) * percentage)
+
+// 		a = NewRoom(rw, room.Height)
+// 		a.X = room.X
+// 		a.Y = room.Y
+// 		a.Run(func(x, y int) int {
+// 			return room.Get(x, y)
+// 		})
+
+// 		b = NewRoom(room.Width-rw, room.Height)
+// 		b.X = room.X + rw
+// 		b.Y = room.Y
+// 		b.Run(func(x, y int) int {
+// 			return room.Get(x+rw, y)
+// 		})
+
+// 	} else {
+// 		rh := int(float32(room.Height) * percentage)
+// 		a = NewRoom(room.Width, rh)
+// 		a.X = room.X
+// 		a.Y = room.Y
+// 		a.Run(func(x, y int) int {
+// 			return room.Get(x, y)
+// 		})
+
+// 		b = NewRoom(room.Width, room.Height-rh)
+// 		b.X = room.X
+// 		b.Y = room.Y + rh
+// 		b.Run(func(x, y int) int {
+// 			return room.Get(x, y+rh)
+// 		})
+
+// 	}
+
+// 	return a, b
+
+// }
+
+// HalfOutline outlines the Room's edge on two sides with the value provided.
+// func (room *Room) HalfOutline(value int) *Room {
+
+// 	room.Run(func(x int, y int) int {
+// 		if y == 0 || x == 0 {
+// 			return value
+// 		}
+// 		return room.Get(x, y)
+// 	})
+
+// 	return room
+
+// }
+
+// const (
+// 	NeighborNone int = iota
+// 	NeighborRight
+// 	NeighborUp
+// 	NeighborLeft
+// 	NeighborDown
+// )
+
+// // NeighborDirection returns the direction that the other room is in if it's immediately a neighbor (on the calling Room's edge).
+// func (room *Room) NeighborDirection(other *Room) int {
+
+// 	if room == other {
+// 		return NeighborNone
+// 	}
+
+// 	if other.X == room.Right()+1 && other.Bottom() >= room.Y && other.Y <= room.Bottom() {
+// 		return NeighborRight
+// 	}
+
+// 	if other.Right() == room.X-1 && other.Bottom() >= room.Y && other.Y <= room.Bottom() {
+// 		return NeighborLeft
+// 	}
+
+// 	if other.Y == room.Bottom()+1 && other.Right() >= room.X && other.X <= room.Right() {
+// 		return NeighborDown
+// 	}
+
+// 	if other.Bottom() == room.Y-1 && other.Right() >= room.X && other.X <= room.Right() {
+// 		return NeighborUp
+// 	}
+
+// 	return NeighborNone
+
+// }
+
 func randBool() bool {
 	r := rand.Float32()
 	if r >= .5 {
@@ -645,6 +1005,13 @@ func randBool() bool {
 
 func randChoiceInt(options ...int) int {
 	return options[rand.Intn(len(options))]
+}
+
+func RandomRoom(roomList []*Room) *Room {
+	if len(roomList) == 0 {
+		return nil
+	}
+	return roomList[rand.Intn(len(roomList))]
 }
 
 func contains(rooms []*Room, room *Room) bool {
