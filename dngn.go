@@ -87,7 +87,6 @@ func (room *Room) GenerateBSP(wallValue, doorValue, numSplits int) {
 					continue
 				}
 				room.Set(parent.X+splitCX, ry, doorValue)
-				fmt.Println(parent.X+splitCX, ry)
 				break
 			}
 
@@ -605,6 +604,82 @@ func (selection Selection) ByPercentage(percentage float32) Selection {
 
 }
 
+// ByArea filters down a selection by only selecting the cells that have X and Y values between X, Y, and X+W and Y+H.
+// It crops the selection, basically.
+func (selection Selection) ByArea(x, y, w, h int) Selection {
+
+	return selection.By(func(cx, cy int) bool {
+		return cx >= x && cy >= y && cx <= x+w-1 && cy <= y+h-1
+	})
+
+}
+
+// AddSelection adds the cells in the other Selection to the current one if they're not already in it.
+func (selection Selection) AddSelection(other Selection) Selection {
+
+	sel := Selection{Room: selection.Room}
+	cells := make([][]int, 0)
+
+	for _, c := range selection.Cells {
+		cells = append(cells, c)
+	}
+
+	for _, c2 := range other.Cells {
+
+		contained := false
+
+		for _, c1 := range selection.Cells {
+
+			if c1[0] == c2[0] && c1[1] == c2[1] {
+				contained = true
+				break
+			}
+
+		}
+
+		if !contained {
+			cells = append(cells, c2)
+		}
+
+	}
+
+	sel.Cells = cells
+
+	return sel
+
+}
+
+// RemoveSelection removes the cells in the other Selection from the current one if they are already in it.
+func (selection Selection) RemoveSelection(other Selection) Selection {
+
+	sel := Selection{Room: selection.Room}
+	cells := make([][]int, 0)
+
+	for _, c1 := range selection.Cells {
+
+		inside := false
+
+		for _, c2 := range other.Cells {
+
+			if c1[0] == c2[0] && c1[1] == c2[1] {
+				inside = true
+				break
+			}
+
+		}
+
+		if !inside {
+			cells = append(cells, c1)
+		}
+
+	}
+
+	sel.Cells = cells
+
+	return sel
+
+}
+
 // ByNeighbor selects the cells that are surrounded at least by minNeighborCount neighbors with a value of
 // neighborValue. If diagonals is true, then diagonals are also checked.
 func (selection Selection) ByNeighbor(neighborValue, minNeighborCount int, diagonals bool) Selection {
@@ -799,28 +874,26 @@ func (selection Selection) Fill(value int) Selection {
 	})
 }
 
-// Degrade applies a formula that randomly degrades the cells in the room that have the from value to the to value if their
-// neighbors have the to value. The more neighbors that have the to value, the more likely the cell will degrade.
-func (selection Selection) Degrade(from, to int) Selection {
+// Degrade applies a formula that randomly degrades the cells in the selection to the "to" value if their neighbors have the
+// "to" value. The more neighbors that have the to value, the more likely the cell will degrade.
+func (selection Selection) Degrade(to int) Selection {
 
 	// Basically, if a cell has 1 neighbor being the value, 15% chance to turn into the value, 2 sides = 25%, 3 sides = 50%
 
 	return selection.By(func(x, y int) bool {
 		c := selection.Room.Get(x, y)
 		multiplier := 0
-		if c == from {
-			if selection.Room.Get(x-1, y) == to {
-				multiplier++
-			}
-			if selection.Room.Get(x+1, y) == to {
-				multiplier++
-			}
-			if selection.Room.Get(x, y-1) == to {
-				multiplier++
-			}
-			if selection.Room.Get(x, y+1) == to {
-				multiplier++
-			}
+		if selection.Room.Get(x-1, y) == to {
+			multiplier++
+		}
+		if selection.Room.Get(x+1, y) == to {
+			multiplier++
+		}
+		if selection.Room.Get(x, y-1) == to {
+			multiplier++
+		}
+		if selection.Room.Get(x, y+1) == to {
+			multiplier++
 		}
 
 		if rand.Float32() <= float32(multiplier)*.025 {

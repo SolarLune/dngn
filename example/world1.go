@@ -34,7 +34,7 @@ func (world *World1) Create() {
 
 	if WorldGenerationMode == 0 {
 
-		mapSelection.Shrink(true).Invert().Fill(1) // Outline
+		mapSelection.RemoveSelection(mapSelection.ByArea(1, 1, world.GameMap.Width-2, world.GameMap.Height-2)).Fill(1)
 		world.GameMap.GenerateBSP(1, 2, 20)
 		mapSelection.ByValue(0).ByPercentage(0.1).Fill(3) // 3 is the alternate floor
 
@@ -46,6 +46,9 @@ func (world *World1) Create() {
 	} else {
 		mapSelection.Fill(1)
 		world.GameMap.GenerateRoomPlacer(0, 6, 3, 3, 5, 5, true)
+
+		// This selects the ground tiles that are between walls to place doors randomly. This isn't really good, but it at least
+		// gets the idea across.
 		mapSelection.ByValue(0).By(func(x, y int) bool {
 			return (world.GameMap.Get(x+1, y) == 1 && world.GameMap.Get(x-1, y) == 1) || (world.GameMap.Get(x, y-1) == 1 && world.GameMap.Get(x, y+1) == 1)
 		}).ByPercentage(0.25).Fill(2)
@@ -70,7 +73,7 @@ func (world *World1) Update() {
 		world.Create()
 	}
 	if keyboard.KeyPressed(sdl.K_a) {
-		world.GameMap.Select().Degrade(0, 1)
+		world.GameMap.Select().Degrade(1)
 	}
 }
 
