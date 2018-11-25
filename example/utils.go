@@ -22,22 +22,22 @@ func DrawTiles(room *dngn.Room, tileset *sdl.Texture) {
 		dst := &sdl.Rect{int32(x) * src.W, int32(y) * src.H, src.W, src.H}
 		rotation := 0.0
 
-		if v == 0 || v == 2 {
+		if v == ' ' || v == '#' {
 			src.Y = src.H
-			if room.Get(x, y-1) == 1 {
+			if room.Get(x, y-1) == 'x' {
 				src.Y -= src.H
 			}
 		}
 
-		if v == 3 {
-			if room.Get(x, y-1) == 1 {
+		if v == '.' {
+			if room.Get(x, y-1) == 'x' {
 				src.Y = 0
 			} else {
 				src.Y = 32
 			}
 		}
 
-		if v == 1 {
+		if v == 'x' { // Wall
 
 			num := 0
 			if left {
@@ -117,7 +117,7 @@ func DrawTiles(room *dngn.Room, tileset *sdl.Texture) {
 
 	}
 
-	doors := roomSelect.ByValue(2)
+	doors := roomSelect.ByRune('#')
 
 	for _, d := range doors.Cells {
 
@@ -125,7 +125,7 @@ func DrawTiles(room *dngn.Room, tileset *sdl.Texture) {
 		src := &sdl.Rect{16, 0, 16, 16}
 		dst := &sdl.Rect{int32(x) * src.W, int32(y) * src.H, src.W, src.H}
 
-		if room.Get(x, y-1) != 1 && room.Get(x, y+1) != 1 { // Vertical door
+		if room.Get(x, y-1) != 'x' && room.Get(x, y+1) != 'x' { // Vertical door
 			dst.Y += 4
 		} else {
 			src.Y += src.H

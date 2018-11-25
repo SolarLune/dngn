@@ -16,13 +16,13 @@ import (
 // Room represents a dungeon map.
 // Width and Height are the width and height of the Room in the layout. This determines the size of the overall Data structure
 // backing the Room layout.
-// Data is the core underlying data structure representing the dungeon. It's a 2D array of ints.
+// Data is the core underlying data structure representing the dungeon. It's a 2D array of runes.
 // Seed is the seed of the Room to use when doing random generation using the Generate* functions below.
 // CustomSeed indicates whether the Seed was customized - if not, then it will default to using the time of the system to have
 // random generation each time you use Generate* functions.
 type Room struct {
 	Width, Height int
-	Data          [][]int
+	Data          [][]rune
 	seed          int64
 	CustomSeed    bool
 }
@@ -31,11 +31,11 @@ type Room struct {
 func NewRoom(width, height int) *Room {
 
 	r := &Room{Width: width, Height: height}
-	r.Data = [][]int{}
+	r.Data = [][]rune{}
 	for y := 0; y < height; y++ {
-		r.Data = append(r.Data, []int{})
+		r.Data = append(r.Data, []rune{})
 		for x := 0; x < width; x++ {
-			r.Data[y] = append(r.Data[y], 0)
+			r.Data[y] = append(r.Data[y], ' ')
 		}
 	}
 
@@ -43,10 +43,29 @@ func NewRoom(width, height int) *Room {
 
 }
 
-// GenerateBSP generates a map using BSP (binary space partitioning) generation, drawing lines of wallValue horizontally and
+func NewRoomFromRuneArrays(arrays [][]rune) *Room {
+
+	r := &Room{Width: len(arrays[0]), Height: len(arrays)}
+	r.Data = [][]rune{}
+	for y := 0; y < len(arrays); y++ {
+		r.Data = append(r.Data, []rune{})
+		for x := 0; x < len(arrays[0]); x++ {
+			r.Data[y] = append(r.Data[y], arrays[y][x])
+		}
+	}
+
+	return r
+
+}
+
+// GenerateBSP generates a map using BSP (binary space partitioning) generation, drawing lines of wallValue runes horizontally and
 // vertically across, partitioning the room into pieces. It also will place single cells of doorValue on the walls, creating
 // doorways. Link: http://www.roguebasin.com/index.php?title=Basic_BSP_Dungeon_generation
-func (room *Room) GenerateBSP(wallValue, doorValue, numSplits int) {
+// BUG: GenerateBSP doesn't handle pre-existing doorValues well (i.e. if 0's already exist on the map and you try to use a
+// doorValue of 0 to indicate not to place doors, it bugs out; either it might place a wall where a doorway exists, or it
+// won't place anything at all because everywhere could be a door). A workaround is to use another value that you turn into
+// 0's later.
+func (room *Room) GenerateBSP(wallValue, doorValue rune, numSplits int) {
 
 	type subroom struct {
 		X, Y, W, H int
@@ -74,7 +93,7 @@ func (room *Room) GenerateBSP(wallValue, doorValue, numSplits int) {
 			}
 
 			// Line is attempting to start on a door
-			if room.Get(parent.X+splitCX, parent.Y) == doorValue || room.Get(parent.X+splitCX, parent.Y+parent.H) == doorValue {
+			if doorValue != wallValue && doorValue != 0 && (room.Get(parent.X+splitCX, parent.Y) == doorValue || room.Get(parent.X+splitCX, parent.Y+parent.H) == doorValue) {
 				return a, b, false
 			}
 
@@ -102,7 +121,7 @@ func (room *Room) GenerateBSP(wallValue, doorValue, numSplits int) {
 		}
 
 		// Line is attempting to start on a door
-		if room.Get(parent.X, parent.Y+splitCY) == doorValue || room.Get(parent.X+parent.W, parent.Y+splitCY) == doorValue {
+		if doorValue != wallValue && doorValue != 0 && (room.Get(parent.X, parent.Y+splitCY) == doorValue || room.Get(parent.X+parent.W, parent.Y+splitCY) == doorValue) {
 			return a, b, false
 		}
 
@@ -172,11 +191,11 @@ func (room *Room) GenerateBSP(wallValue, doorValue, numSplits int) {
 
 }
 
-// GenerateRoomPlacer generates a map using random room placement. roomCount is how many rooms to place, roomMinWidth and Height
-// are how small they can be, minimum, while roomMaxWidth and Height are how large they can be. connectRooms determines if the
-// algorithm should also attempt to connect the rooms using pathways between each room. It returns the positions of each room
-// created.
-func (room *Room) GenerateRoomPlacer(fillValue, roomCount, roomMinWidth, roomMinHeight, roomMaxWidth, roomMaxHeight int, connectRooms bool) [][]int {
+// GenerateRoomPlacer generates a map using random room placement. fillRune is the rune to fill the rooms generated with. roomCount
+// is how many rooms to place, roomMinWidth and Height are how small they can be, minimum, while roomMaxWidth and Height are how large
+// they can be. connectRooms determines if the algorithm should also attempt to connect the rooms using pathways between each room. The
+// function returns the positions of each room created.
+func (room *Room) GenerateRoomPlacer(fillRune rune, roomCount, roomMinWidth, roomMinHeight, roomMaxWidth, roomMaxHeight int, connectRooms bool) [][]int {
 
 	if room.CustomSeed {
 		rand.Seed(room.seed)
@@ -202,7 +221,7 @@ func (room *Room) GenerateRoomPlacer(fillValue, roomCount, roomMinWidth, roomMin
 			dx := int(math.Abs(float64(sx) - float64(x)))
 			dy := int(math.Abs(float64(sy) - float64(y)))
 			if dx < roomW && dy < roomH {
-				room.Set(x, y, fillValue)
+				room.Set(x, y, fillRune)
 			}
 			return true
 		}
@@ -223,7 +242,7 @@ func (room *Room) GenerateRoomPlacer(fillValue, roomCount, roomMinWidth, roomMin
 				x2 := roomPositions[p+1][0]
 				y2 := roomPositions[p+1][1]
 
-				room.DrawLine(x, y, x2, y2, 0, 1, true)
+				room.DrawLine(x, y, x2, y2, fillRune, 1, true)
 
 			}
 
@@ -236,11 +255,11 @@ func (room *Room) GenerateRoomPlacer(fillValue, roomCount, roomMinWidth, roomMin
 }
 
 // GenerateDrunkWalk generates a map in the bounds of the Room specified using drunk walking. It will pick a random point in the
-// Room and begin walking around at random, placing fillValue in the Room, until at least percentageFilled (0.0 - 1.0) of the Room
+// Room and begin walking around at random, placing fillRune in the Room, until at least percentageFilled (0.0 - 1.0) of the Room
 // is filled. Note that it only counts values placed in the cell, not instances where it moves over a cell that already has the
 // value being placed.
 // Link: http://www.roguebasin.com/index.php?title=Random_Walk_Cave_Generation
-func (room *Room) GenerateDrunkWalk(fillValue int, percentageFilled float32) {
+func (room *Room) GenerateDrunkWalk(fillRune rune, percentageFilled float32) {
 
 	if room.CustomSeed {
 		rand.Seed(room.seed)
@@ -258,8 +277,8 @@ func (room *Room) GenerateDrunkWalk(fillValue int, percentageFilled float32) {
 
 		cell := room.Get(sx, sy)
 
-		if cell != fillValue {
-			room.Set(sx, sy, fillValue)
+		if cell != fillRune {
+			room.Set(sx, sy, fillRune)
 			fillCount++
 		}
 
@@ -295,11 +314,11 @@ func (room *Room) GenerateDrunkWalk(fillValue int, percentageFilled float32) {
 
 }
 
-// DrawLine is used to draw a line from x, y, to x2, y2, placing the value fillValue in the cells between those points (including)
+// DrawLine is used to draw a line from x, y, to x2, y2, placing the rune specified by fillRune in the cells between those points (including)
 // in those points themselves, as well. thickness controls how thick the line is. If stagger is on, then the line will stagger it's
 // vertical movement, allowing a 1-thickness line to actually be pass-able if an object was only able to move in cardinal directions
 // and the line had a diagonal slope.
-func (room *Room) DrawLine(x, y, x2, y2, fillValue, thickness int, stagger bool) {
+func (room *Room) DrawLine(x, y, x2, y2 int, fillRune rune, thickness int, stagger bool) {
 
 	dx := int(math.Abs(float64(x2 - x)))
 	dy := int(math.Abs(float64(y2 - y)))
@@ -325,7 +344,7 @@ func (room *Room) DrawLine(x, y, x2, y2, fillValue, thickness int, stagger bool)
 	set := func(x, y int) {
 		for fx := 0; fx < thickness; fx++ {
 			for fy := 0; fy < thickness; fy++ {
-				room.Set(x+fx-thickness/2, y+fy-thickness/2, fillValue)
+				room.Set(x+fx-thickness/2, y+fy-thickness/2, fillRune)
 			}
 		}
 	}
@@ -368,8 +387,8 @@ func (room *Room) DrawLine(x, y, x2, y2, fillValue, thickness int, stagger bool)
 
 }
 
-// Set sets the value provided in the Room's Data. A convenience function stand-in for "room.Data[y][x] = value".
-func (room *Room) Set(x, y, value int) {
+// Set sets the rune provided in the Room's Data. A convenience function stand-in for "room.Data[y][x] = value".
+func (room *Room) Set(x, y int, char rune) {
 
 	if x < 0 {
 		x = 0
@@ -383,18 +402,18 @@ func (room *Room) Set(x, y, value int) {
 		y = room.Height - 1
 	}
 
-	room.Data[y][x] = value
+	room.Data[y][x] = char
 
 }
 
-// Get returns the value provided in the Room's Data. A convenience function stand-in for "room.Data[y][x]".
-func (room *Room) Get(x, y int) int {
+// Get returns the rune in the specified position in the Room's Data array. A convenience function stand-in for "value := room.Data[y][x]".
+func (room *Room) Get(x, y int) rune {
 
 	if x < 0 || x >= room.Width || y < 0 || y >= room.Height {
 		return 0
 	}
 
-	return int(room.Data[y][x])
+	return room.Data[y][x]
 }
 
 // SetSeed sets a custom seed for random generation.
@@ -421,11 +440,11 @@ func (room *Room) Resize(width, height int) *Room {
 	room.Width = width
 	room.Height = height
 
-	data := make([][]int, 0)
+	data := make([][]rune, 0)
 
 	for y := 0; y < height; y++ {
 
-		data = append(data, []int{})
+		data = append(data, []rune{})
 
 		for x := 0; x < width; x++ {
 
@@ -467,11 +486,8 @@ func (room *Room) DataToString() string {
 	for y := 0; y < len(room.Data); y++ {
 		s += fmt.Sprintf("%3d  |", y)
 		for x := 0; x < len(room.Data[y]); x++ {
-			if room.Data[y][x] == 0 {
-				s += fmt.Sprintf("  ")
-			} else {
-				s += fmt.Sprintf("%v ", room.Data[y][x])
-			}
+			// s += " " + string(room.Data[y][x])
+			s += fmt.Sprintf("%v ", string(room.Data[y][x]))
 		}
 		s += "|\n"
 	}
@@ -555,15 +571,15 @@ func (room *Room) SelectContiguous(x, y int) Selection {
 
 }
 
-// A Selection represents a selection of cells in the Room's data array, and can be filtered down and manipulated using the
-// functions on the Selection struct.
+// A Selection represents a selection of cell positions in the Room's data array, and can be filtered down and manipulated
+// using the functions on the Selection struct.
 type Selection struct {
 	Room  *Room
 	Cells [][]int
 }
 
-// ByValue filters the Selection down to the cells that have the value provided.
-func (selection Selection) ByValue(value int) Selection {
+// ByRune filters the Selection down to the cells that have the character (rune) provided.
+func (selection Selection) ByRune(value rune) Selection {
 
 	return selection.By(func(x, y int) bool {
 		if selection.Room.Get(x, y) == value {
@@ -682,7 +698,7 @@ func (selection Selection) RemoveSelection(other Selection) Selection {
 
 // ByNeighbor selects the cells that are surrounded at least by minNeighborCount neighbors with a value of
 // neighborValue. If diagonals is true, then diagonals are also checked.
-func (selection Selection) ByNeighbor(neighborValue, minNeighborCount int, diagonals bool) Selection {
+func (selection Selection) ByNeighbor(neighborValue rune, minNeighborCount int, diagonals bool) Selection {
 
 	return selection.By(func(x, y int) bool {
 
@@ -866,38 +882,38 @@ func (selection *Selection) Contains(x, y int) bool {
 	return false
 }
 
-// Fill fills the cells in the Selection with the value provided.
-func (selection Selection) Fill(value int) Selection {
+// Fill fills the cells in the Selection with the rune provided.
+func (selection Selection) Fill(char rune) Selection {
 	return selection.By(func(x, y int) bool {
-		selection.Room.Set(x, y, value)
+		selection.Room.Set(x, y, char)
 		return true
 	})
 }
 
-// Degrade applies a formula that randomly degrades the cells in the selection to the "to" value if their neighbors have the
-// "to" value. The more neighbors that have the to value, the more likely the cell will degrade.
-func (selection Selection) Degrade(to int) Selection {
+// Degrade applies a formula that randomly sets the cells in the selection to the provided char rune if their neighbors have
+// that same rune value. The more neighbors that have the rune value, the more likely the selected cell will be set to it as well.
+func (selection Selection) Degrade(char rune) Selection {
 
 	// Basically, if a cell has 1 neighbor being the value, 15% chance to turn into the value, 2 sides = 25%, 3 sides = 50%
 
 	return selection.By(func(x, y int) bool {
 		c := selection.Room.Get(x, y)
 		multiplier := 0
-		if selection.Room.Get(x-1, y) == to {
+		if selection.Room.Get(x-1, y) == char {
 			multiplier++
 		}
-		if selection.Room.Get(x+1, y) == to {
+		if selection.Room.Get(x+1, y) == char {
 			multiplier++
 		}
-		if selection.Room.Get(x, y-1) == to {
+		if selection.Room.Get(x, y-1) == char {
 			multiplier++
 		}
-		if selection.Room.Get(x, y+1) == to {
+		if selection.Room.Get(x, y+1) == char {
 			multiplier++
 		}
 
 		if rand.Float32() <= float32(multiplier)*.025 {
-			c = to
+			c = char
 		}
 		selection.Room.Set(x, y, c)
 		return true
