@@ -351,8 +351,9 @@ func (room *Room) Rotate() {
 
 }
 
-// Copy copies the data from the other Room into this Room's data.
-func (room *Room) Copy(other *Room, x, y int) {
+// CopyFrom copies the data from the other Room into this Room's data. x and y are the position of the other Room's data in the
+// destination (calling) Room.
+func (room *Room) CopyFrom(other *Room, x, y int) {
 
 	for cy := 0; cy < room.Height; cy++ {
 		for cx := 0; cx < room.Width; cx++ {
