@@ -43,6 +43,7 @@ func NewRoom(width, height int) *Room {
 
 }
 
+// NewRoomFromRuneArrays creates a new Room with the data contained in the provided rune arrays.
 func NewRoomFromRuneArrays(arrays [][]rune) *Room {
 
 	r := &Room{Width: len(arrays[0]), Height: len(arrays)}
@@ -51,6 +52,23 @@ func NewRoomFromRuneArrays(arrays [][]rune) *Room {
 		r.Data = append(r.Data, []rune{})
 		for x := 0; x < len(arrays[0]); x++ {
 			r.Data[y] = append(r.Data[y], arrays[y][x])
+		}
+	}
+
+	return r
+
+}
+
+// NewRoomFromStringArray creates a new Room with the data contained in the provided string array.
+func NewRoomFromStringArray(array []string) *Room {
+
+	r := &Room{Width: len(array[0]), Height: len(array)}
+	r.Data = [][]rune{}
+	for y := 0; y < len(array); y++ {
+		asRunes := []rune(array[y])
+		r.Data = append(r.Data, []rune{})
+		for x := 0; x < len(array[0]); x++ {
+			r.Data[y] = append(r.Data[y], asRunes[x])
 		}
 	}
 
@@ -191,11 +209,11 @@ func (room *Room) GenerateBSP(wallValue, doorValue rune, numSplits int) {
 
 }
 
-// GenerateRoomPlacer generates a map using random room placement. fillRune is the rune to fill the rooms generated with. roomCount
+// GenerateRandomRooms generates a map using random room creation. fillRune is the rune to fill the rooms generated with. roomCount
 // is how many rooms to place, roomMinWidth and Height are how small they can be, minimum, while roomMaxWidth and Height are how large
 // they can be. connectRooms determines if the algorithm should also attempt to connect the rooms using pathways between each room. The
 // function returns the positions of each room created.
-func (room *Room) GenerateRoomPlacer(fillRune rune, roomCount, roomMinWidth, roomMinHeight, roomMaxWidth, roomMaxHeight int, connectRooms bool) [][]int {
+func (room *Room) GenerateRandomRooms(fillRune rune, roomCount, roomMinWidth, roomMinHeight, roomMaxWidth, roomMaxHeight int, connectRooms bool) [][]int {
 
 	if room.CustomSeed {
 		rand.Seed(room.seed)
@@ -310,6 +328,38 @@ func (room *Room) GenerateDrunkWalk(fillRune rune, percentageFilled float32) {
 			break
 		}
 
+	}
+
+}
+
+// Rotate rotates the entire room 90 degrees clockwise.
+func (room *Room) Rotate() {
+
+	newData := make([][]rune, 0)
+
+	for y := 0; y < len(room.Data[0]); y++ {
+		newData = append(newData, []rune{})
+		for x := 0; x < len(room.Data); x++ {
+			nx := (room.Height - x) - 1
+			newData[y] = append(newData[y], room.Data[nx][y])
+		}
+	}
+
+	room.Data = newData
+	room.Height = len(room.Data)
+	room.Width = len(room.Data[0])
+
+}
+
+// Copy copies the data from the other Room into this Room's data.
+func (room *Room) Copy(other *Room, x, y int) {
+
+	for cy := 0; cy < room.Height; cy++ {
+		for cx := 0; cx < room.Width; cx++ {
+			if cx >= x && cy >= y && cx-x < other.Width && cy-y < other.Height {
+				room.Set(cx, cy, other.Get(cx-x, cy-y))
+			}
+		}
 	}
 
 }

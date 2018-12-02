@@ -45,7 +45,7 @@ func (world *World1) Create() {
 
 	} else {
 		mapSelection.Fill('x')
-		world.GameMap.GenerateRoomPlacer(' ', 6, 3, 3, 5, 5, true)
+		world.GameMap.GenerateRandomRooms(' ', 6, 3, 3, 5, 5, true)
 
 		// This selects the ground tiles that are between walls to place doors randomly. This isn't really good, but it at least
 		// gets the idea across.
