@@ -209,11 +209,18 @@ func (room *Room) GenerateBSP(wallValue, doorValue rune, numSplits int) {
 
 }
 
-// GenerateRandomRooms generates a map using random room creation. fillRune is the rune to fill the rooms generated with. roomCount
-// is how many rooms to place, roomMinWidth and Height are how small they can be, minimum, while roomMaxWidth and Height are how large
-// they can be. connectRooms determines if the algorithm should also attempt to connect the rooms using pathways between each room. The
-// function returns the positions of each room created.
-func (room *Room) GenerateRandomRooms(fillRune rune, roomCount, roomMinWidth, roomMinHeight, roomMaxWidth, roomMaxHeight int, connectRooms bool) [][]int {
+// GenerateRandomRooms generates a map using random room creation.
+// roomFillRune is the rune to fill the rooms generated with.
+// hallwayFillRune is the rune to fill the hallways with
+// roomCount is how many rooms to place
+// roomMinWidth and Height are how small they can be, minimum, while roomMaxWidth and Height are how large
+//
+// connectRooms determines if the algorithm should also attempt to connect the rooms using pathways between each room.
+// allowDiagonal determines the shape of the connections. If true, then a direct connection will be made. If false, then only horizontal
+// or vertical connections are made.
+//
+// The function returns the positions of each room created.
+func (room *Room) GenerateRandomRooms(roomFillRune rune, hallwayFillRune rune, roomCount, roomMinWidth, roomMinHeight, roomMaxWidth, roomMaxHeight int, connectRooms bool, allowDiagonal bool) [][]int {
 
 	if room.CustomSeed {
 		rand.Seed(room.seed)
@@ -224,9 +231,6 @@ func (room *Room) GenerateRandomRooms(fillRune rune, roomCount, roomMinWidth, ro
 	roomPositions := make([][]int, 0)
 
 	for i := 0; i < roomCount; i++ {
-
-		// roomSize := float64(2 + rand.Intn(2))
-
 		sx := rand.Intn(room.Width)
 		sy := rand.Intn(room.Height)
 
@@ -239,7 +243,7 @@ func (room *Room) GenerateRandomRooms(fillRune rune, roomCount, roomMinWidth, ro
 			dx := int(math.Abs(float64(sx) - float64(x)))
 			dy := int(math.Abs(float64(sy) - float64(y)))
 			if dx < roomW && dy < roomH {
-				room.Set(x, y, fillRune)
+				room.Set(x, y, roomFillRune)
 			}
 			return true
 		}
@@ -248,8 +252,13 @@ func (room *Room) GenerateRandomRooms(fillRune rune, roomCount, roomMinWidth, ro
 
 	}
 
-	if connectRooms {
+	// Rooms are drawn. Save them for later use after connections are made
+	roomMap := make(map[int]Selection)
+	for idx, r := range roomPositions {
+		roomMap[idx] = room.SelectContiguous(r[0], r[1])
+	}
 
+	if connectRooms && allowDiagonal {
 		for p := 0; p < len(roomPositions); p++ {
 
 			if p < len(roomPositions)-1 {
@@ -260,14 +269,47 @@ func (room *Room) GenerateRandomRooms(fillRune rune, roomCount, roomMinWidth, ro
 				x2 := roomPositions[p+1][0]
 				y2 := roomPositions[p+1][1]
 
-				room.DrawLine(x, y, x2, y2, fillRune, 1, true)
-
+				room.DrawLine(x, y, x2, y2, hallwayFillRune, 1, true)
 			}
-
 		}
-
 	}
 
+	if connectRooms && !allowDiagonal {
+		for a := range roomPositions {
+			var (
+				x  int
+				y  int
+				x2 int
+				y2 int
+			)
+			for b := range roomPositions {
+				if a == b {
+					break
+				}
+				var connected bool = false
+				for _, room1Coord := range roomMap[a].Cells {
+					for _, room2Coord := range roomMap[b].Cells {
+						if room1Coord[0] == room2Coord[0] || room1Coord[1] == room2Coord[1] {
+							x = room1Coord[0]
+							y = room1Coord[1]
+							x2 = room2Coord[0]
+							y2 = room2Coord[1]
+							room.DrawLine(x, y, x2, y2, hallwayFillRune, 1, false)
+							connected = true
+							break
+						}
+					}
+					if connected {
+						break
+					}
+				}
+			}
+		}
+	}
+	// Fix up the rooms to clear out errant hallways
+	for _, room := range roomMap {
+		room.Fill(roomFillRune)
+	}
 	return roomPositions
 
 }

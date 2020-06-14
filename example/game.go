@@ -57,20 +57,26 @@ func (game *Game) GenerateRoom() {
 
 	mapSelection := game.Room.Select()
 
-	if game.GenerationMode == 0 {
-
+	switch game.GenerationMode {
+	case 0:
 		mapSelection.RemoveSelection(mapSelection.ByArea(1, 1, game.Room.Width-2, game.Room.Height-2)).Fill('x')
 		game.Room.GenerateBSP('x', '#', 20)
 		mapSelection.ByRune(' ').ByPercentage(0.1).Fill('.') // '.' is the alternate floor
-
-	} else if game.GenerationMode == 1 {
-
+	case 1:
 		mapSelection.Fill('x')
 		game.Room.GenerateDrunkWalk(' ', 0.5)
-
-	} else {
+	case 2:
 		mapSelection.Fill('x')
-		game.Room.GenerateRandomRooms(' ', 6, 3, 3, 5, 5, true)
+		game.Room.GenerateRandomRooms(' ', ' ', 6, 3, 3, 5, 5, true, false)
+
+		// This selects the ground tiles that are between walls to place doors randomly. This isn't really good, but it at least
+		// gets the idea across.
+		mapSelection.ByRune(' ').By(func(x, y int) bool {
+			return (game.Room.Get(x+1, y) == 'x' && game.Room.Get(x-1, y) == 'x') || (game.Room.Get(x, y-1) == 'x' && game.Room.Get(x, y+1) == 'x')
+		}).ByPercentage(0.25).Fill('#')
+	default:
+		mapSelection.Fill('x')
+		game.Room.GenerateRandomRooms(' ', ' ', 6, 3, 3, 5, 5, true, true)
 
 		// This selects the ground tiles that are between walls to place doors randomly. This isn't really good, but it at least
 		// gets the idea across.
@@ -98,9 +104,13 @@ func (game *Game) Update(screen *ebiten.Image) error {
 		game.GenerationMode = 1
 		game.GenerateRoom()
 	} else if inpututil.IsKeyJustPressed(ebiten.Key3) {
+		game.GenerationMode = 3
+		game.GenerateRoom()
+	} else if inpututil.IsKeyJustPressed(ebiten.Key4) {
 		game.GenerationMode = 2
 		game.GenerateRoom()
 	}
+
 	if inpututil.IsKeyJustPressed(ebiten.KeyA) {
 		game.Room.Select().Degrade('x')
 	}
@@ -298,7 +308,8 @@ func (game *Game) DrawTiles(screen *ebiten.Image) {
 	text.Draw(screen,
 		"Press 1 to generate a BSP generation room.\n"+
 			"Press 2 to generate a Drunk Walk room.\n"+
-			"Press 3 to generate a Room Placement room.\n"+
+			"Press 3 to generate a Room Placement room with diagonals.\n"+
+			"Press 4 to generate a Room Placement room without diagonals\n"+
 			"Press A to degrade the map.",
 		game.Fontface, 40, 32, color.White)
 
