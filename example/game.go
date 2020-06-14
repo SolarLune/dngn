@@ -67,13 +67,21 @@ func (game *Game) GenerateRoom() {
 		game.Room.GenerateDrunkWalk(' ', 0.5)
 	case 2:
 		mapSelection.Fill('x')
-		game.Room.GenerateRandomRooms(' ', ' ', 6, 3, 3, 5, 5, true, false)
+		game.Room.GenerateRandomRooms('R', 'H', 6, 3, 3, 5, 5, true, false)
 
-		// This selects the ground tiles that are between walls to place doors randomly. This isn't really good, but it at least
-		// gets the idea across.
-		mapSelection.ByRune(' ').By(func(x, y int) bool {
-			return (game.Room.Get(x+1, y) == 'x' && game.Room.Get(x-1, y) == 'x') || (game.Room.Get(x, y-1) == 'x' && game.Room.Get(x, y+1) == 'x')
-		}).ByPercentage(0.25).Fill('#')
+		// A hallway space with three room spaces next to it as well as two walls that are non-diagonal
+		// Desired door placement
+		//      R
+		// HHHHDR
+		//      R
+		doorLocations := game.Room.Select().ByRune('H').ByNeighbor('R', 3, true).By(func(x, y int) bool {
+			return (game.Room.Get(x+1, y) == 'x' && game.Room.Get(x-1, y) == 'x') || (game.Room.Get(x, y+1) == 'x' && game.Room.Get(x, y-1) == 'x')
+		})
+
+		doorLocations.ByPercentage(.5).Fill('#')
+		game.Room.Select().ByRune('H').Fill(' ')
+		game.Room.Select().ByRune('R').Fill(' ')
+
 	default:
 		mapSelection.Fill('x')
 		game.Room.GenerateRandomRooms(' ', ' ', 6, 3, 3, 5, 5, true, true)
@@ -84,9 +92,7 @@ func (game *Game) GenerateRoom() {
 			return (game.Room.Get(x+1, y) == 'x' && game.Room.Get(x-1, y) == 'x') || (game.Room.Get(x, y-1) == 'x' && game.Room.Get(x, y+1) == 'x')
 		}).ByPercentage(0.25).Fill('#')
 	}
-
 	fmt.Println(game.Room.DataToString())
-
 }
 
 func (game *Game) Update(screen *ebiten.Image) error {
