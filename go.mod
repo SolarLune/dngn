@@ -1,4 +1,4 @@
-module github.com/SolarLune/dngn
+module github.com/solarlune/dngn
 
 go 1.14
 

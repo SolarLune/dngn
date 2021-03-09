@@ -3,7 +3,7 @@
 
 ![dngn_v0.2](https://user-images.githubusercontent.com/4733521/48660612-68e94480-ea19-11e8-8f4d-b378fa64dabe.gif)
 
-[GoDocs](https://pkg.go.dev/github.com/SolarLune/dngn?tab=doc)
+[pkg.go.dev docs](https://pkg.go.dev/github.com/SolarLune/dngn?tab=doc)
 
 ## What is dngn?
 
@@ -29,69 +29,51 @@ Or import and use it directly in your code with a `go.mod` file in your project 
 
 ## How do I use it?
 
-dngn is based around Rooms and Selections. A Room contains a rune array, representing the Room's data. You can either manipulate the data array manually, or use Selections to grab a selection of cells in the Room to alter. 
-
-To start off with using dngn, you can just create a Room, and then use one of the included `Generate` functions to generate the data:
+dngn is based around Layouts and Selections. A Layout contains a rune array, which is the internal data. You can either manipulate the data array manually, or use Selections to grab a selection of cells in the Layout to alter. Layouts have Generate functions to generate a game map; they each take different arguments to influence how the function generates a map. To start off, you can just create a Layout, and then use one of the included `Generate` functions to generate the data:
 
 ```go
-import "github.com/SolarLune/dngn"
+import "github.com/solarlune/dngn"
 
-var GameMap *dngn.Room
+var GameMap *dngn.Layout
 
 func Init() {
 
-    // This line creates a new Room. The size is 10x10.
-    GameMap = dngn.NewRoom(10, 10)
+    // This line creates a new *dngn.Layout. The size is 10x10.
+    GameMap = dngn.NewLayout(10, 10)
 
-    // This will select the cells the map has, and then fill the selection with "x"s.
-    GameMap.Select().Fill('x')
+    // This will generate a map using BSP map generation and some sensible default settings.
+    GameMap.GenerateBSP(dngn.NewDefaultBSPOptions())
 
-    // Selections are structs, so we can store Selections in variables to store the "view" of the data.
-    selection := GameMap.Select()
-
-    // This will run a drunk-walk generation algorithm on the Room. It starts at a random point
-    // in the Room, and walks around the Room, placing the value specified (0, in this case)
-    // until the room is the percentage provided (0.5, or 50%, in this case) filled.
-    GameMap.GenerateDrunkWalk(' ', 0.5)
-
-    // This function will degrade the map slightly, making cells with a ' ' in them randomly turn into a cell with a 'x',
-    // depending on how heavily the cell is surrounded by 'x's.
-    GameMap.Select().ByRune(' ').Degrade('x')
-
-    // Room.DataToString() will present the data in a nice, easy-to-understand visual format, useful when debugging.
+    // Layout.DataToString() will present the data in a nice, easy-to-understand visual format, useful when debugging.
     fmt.Println(GameMap.DataToString())
 
-    // Now we're done! We can use the Room.
+    // Now we're done! We can visualize and use the Layout.
 
 }
 
 ```
 
-Selections can also be powerful, as they allow you to easily select cells to manipulate. You can also chain Selection filtering functions together. As an example, say you wanted to randomly change a small percentage of floor tiles (' ') into trap tiles ('z'). You could easily do this with Selections, like so:
+As seen above, Selections can be chained together. As an example, say you wanted to randomly change a small percentage of floor tiles (' ') into trap tiles ('z'). You could easily do this with Selections, like so:
 
 ```go
-    GameMap.Select().ByValue(' ').ByPercentage(0.1).Fill('z')
+    GameMap.Select().FilterByValue(' ').FilterByPercentage(0.1).Fill('z')
 ```
 
 ---
 
-And that's about it! There are also some nice additional features to make it easier to handle working with and altering Rooms.
+And that's about it! There are also some nice additional features to make it easier to handle working with and altering Layouts.
 
 ## Wait... How do I actually LOOK at it?
 
-Welp.
+dngn just does map generation - it doesn't handle visualization / rendering of the map. For that, you can use another framework, like [pixel](https://github.com/faiface/pixel), [Ebiten](https://github.com/hajimehoshi/ebiten), [raylib-goplus](https://github.com/Lachee/raylib-goplus), or [go-sdl2](https://github.com/veandco/go-sdl2).
 
-So dngn just does map generation - it doesn't handle visualization / rendering of the map. For that, you can use another framework, like [pixel](https://github.com/faiface/pixel), [Ebiten](https://github.com/hajimehoshi/ebiten), [raylib-goplus](https://github.com/Lachee/raylib-goplus), or [go-sdl2](https://github.com/veandco/go-sdl2).
-
-Soooo that's about it. If you want to see more info or examples, feel free to examine the main.go and world#.go tests to see how a couple of quick example tests are set up.
-
-[You can check out the GoDoc link here, as well.](https://pkg.go.dev/github.com/SolarLune/dngn?tab=doc)
-
-You can also run the example by simply running the example from the project's root directory:
+That's about it. You can run the example by simply running the example from the project's root directory:
 
 ```
 $ go run ./example/
 ```
+
+[pkg.go.dev docs](https://pkg.go.dev/github.com/SolarLune/dngn?tab=doc)
 
 ## Dependencies?
 
