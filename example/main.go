@@ -59,7 +59,8 @@ func (game *Game) GenerateMap() {
 	if game.GenerationMode == 0 {
 
 		bspOptions := dngn.NewDefaultBSPOptions()
-		bspOptions.SplitCount = 40
+		bspOptions.SplitCount = 60
+		bspOptions.MinimumRoomSize = 3
 
 		bspRooms := game.Map.GenerateBSP(bspOptions)
 
@@ -87,7 +88,7 @@ func (game *Game) GenerateMap() {
 
 			hops := room.CountHopsTo(start)
 
-			if hops < 0 || hops > 5 {
+			if hops < 0 || hops > 4 {
 				// We're filtering out a little bit more on the width and height because the walls and doorways in GenerateBSP() are always on the top and left sides of each room.
 				// By adding the right and bottom as well, we can nuke any doors that led into rooms we're deleting.
 				mapSelection.FilterByArea(room.X, room.Y, room.W+1, room.H+1).Fill('x')

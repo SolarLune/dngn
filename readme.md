@@ -7,7 +7,7 @@
 
 ## What is dngn?
 
-dngn is a golang library specifically created to help make generating random maps easier.
+dngn is a golang library specifically created to help make generating random maps easier. This does not create maps from hand-crafted pieces randomly slotted together, but rather generates cellular rooms in a grid.
 
 ## Why is it called that?
 
@@ -53,7 +53,7 @@ func Init() {
 
 ```
 
-As seen above, Selections can be chained together. As an example, say you wanted to randomly change a small percentage of floor tiles (' ') into trap tiles ('z'). You could easily do this with Selections, like so:
+After generating the Layout, Selections can be used to filter out pieces of the Layout to alter them. Selections can also be chained together. As an example, say you wanted to randomly change a small percentage of floor tiles (' ') into trap tiles ('z'). You could easily do this with Selections, like so:
 
 ```go
     GameMap.Select().FilterByValue(' ').FilterByPercentage(0.1).Fill('z')
@@ -61,7 +61,7 @@ As seen above, Selections can be chained together. As an example, say you wanted
 
 ---
 
-And that's about it! There are also some nice additional features to make it easier to handle working with and altering Layouts.
+And that's about it! There are also some nice additional features to make it easier to handle working with and altering Layouts directly.
 
 ## Wait... How do I actually LOOK at it?
 
