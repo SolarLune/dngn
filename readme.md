@@ -23,7 +23,7 @@ And so, here we are.
 
 Just go get it and import it in your game application.
 
-`go get github.com/SolarLune/dngn`
+`go get github.com/solarlune/dngn`
 
 Or import and use it directly in your code with a `go.mod` file in your project directory, and it will go ahead and automatically download it and use it for your project. [See the Go wiki.](https://github.com/golang/go/wiki/Modules#quick-start)
 
