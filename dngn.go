@@ -90,11 +90,11 @@ func NewDefaultBSPOptions() BSPOptions {
 
 }
 
-//BSPRoom represents a room generated through Layout.GenerateBSP().
+// BSPRoom represents a room generated through Layout.GenerateBSP().
 type BSPRoom struct {
 	X, Y, W, H  int        // X, Y, Width, and Height of the BSPRoom.
 	Connected   []*BSPRoom // The BSPRooms this room is connected to.
-	Traversible bool       // Whether the BSPRoom is traversible when using CountHopsTo().
+	Traversable bool       // Whether the BSPRoom is traversable when using CountHopsTo().
 }
 
 func NewBSPRoom(x, y, w, h int) *BSPRoom {
@@ -104,7 +104,7 @@ func NewBSPRoom(x, y, w, h int) *BSPRoom {
 		W:           w,
 		H:           h,
 		Connected:   []*BSPRoom{},
-		Traversible: true,
+		Traversable: true,
 	}
 }
 
@@ -125,7 +125,7 @@ func (bsp *BSPRoom) Center() Position {
 	return Position{bsp.X + bsp.W/2, bsp.Y + bsp.H/2}
 }
 
-// CountHopsTo will count the number of hops to go from one room to another, by hopping through connected neighbors. If no traversible link between the two rooms found, CountHopsTo will return -1.
+// CountHopsTo will count the number of hops to go from one room to another, by hopping through connected neighbors. If no traversable link between the two rooms found, CountHopsTo will return -1.
 func (bsp *BSPRoom) CountHopsTo(room *BSPRoom) int {
 
 	toCheck := append([]*BSPRoom{}, bsp)
@@ -143,7 +143,7 @@ func (bsp *BSPRoom) CountHopsTo(room *BSPRoom) int {
 
 		toCheck = toCheck[1:]
 
-		if !next.Traversible {
+		if !next.Traversable {
 			continue
 		}
 
@@ -186,13 +186,13 @@ func (bsp *BSPRoom) Necessary() bool {
 		return true
 	}
 
-	bsp.Traversible = false
+	bsp.Traversable = false
 
 	for _, neighbor := range bsp.Connected {
 
 		// If your neighbor is only connected to you, then you're necessary.
 		if len(neighbor.Connected) <= 1 {
-			bsp.Traversible = true
+			bsp.Traversable = true
 			return true
 		}
 
@@ -203,7 +203,7 @@ func (bsp *BSPRoom) Necessary() bool {
 			}
 
 			if neighbor.CountHopsTo(otherNeighbor) < 0 {
-				bsp.Traversible = true
+				bsp.Traversable = true
 				return true
 			}
 
@@ -211,7 +211,7 @@ func (bsp *BSPRoom) Necessary() bool {
 
 	}
 
-	bsp.Traversible = true
+	bsp.Traversable = true
 	return false
 
 }
