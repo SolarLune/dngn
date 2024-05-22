@@ -361,14 +361,14 @@ func (layout *Layout) GenerateDrunkWalk(emptyRune rune, wallRune rune, percentag
 		}
 
 		dir := layout.RNG.Intn(4)
-
-		if dir == 0 {
+		switch dir {
+		case 0:
 			sx++
-		} else if dir == 1 {
+		case 1:
 			sx--
-		} else if dir == 2 {
+		case 2:
 			sy++
-		} else if dir == 3 {
+		case 3:
 			sy--
 		}
 
@@ -687,5 +687,4 @@ func (layout *Layout) SelectContiguous(x, y int, diagonal bool) Selection {
 	newSelection.Cells = added
 
 	return newSelection
-
 }
