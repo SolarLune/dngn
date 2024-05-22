@@ -12,26 +12,25 @@ import (
 	"math"
 	"math/rand"
 	"sort"
-	"time"
 )
 
 // Layout represents a dungeon map.
 // Width and Height are the width and height of the Layout in the layout. This determines the size of the overall Data structure
 // backing the Layout layout.
 // Data is the core underlying data structure representing the dungeon. It's a 2D array of runes.
-// Seed is the seed of the Layout to use when doing random generation using the Generate* functions below. By default, the seed is
-// the lowest possible negative number (math.MinInt64), and so will use the time to set the seed.
+// RNG is the random number generator of the Layout to use when doing random generation using the Generate* functions below. By default,
+// the a generator is made at runtime.
 type Layout struct {
 	Width, Height int
 	Data          [][]rune
-	Seed          int64
+	RNG           *rand.Rand
 }
 
 // NewLayout returns a new Layout with the specified width and height.
 func NewLayout(width, height int) *Layout {
-
-	r := &Layout{Width: width, Height: height, Seed: math.MinInt64}
+	r := &Layout{Width: width, Height: height, RNG: nil}
 	r.Data = [][]rune{}
+	r.RNG = rand.New(rand.NewSource(rand.Int63()))
 	for y := 0; y < height; y++ {
 		r.Data = append(r.Data, []rune{})
 		for x := 0; x < width; x++ {
@@ -40,13 +39,12 @@ func NewLayout(width, height int) *Layout {
 	}
 
 	return r
-
 }
 
 // NewLayoutFromRuneArrays creates a new Layout with the data contained in the provided rune arrays.
 func NewLayoutFromRuneArrays(arrays [][]rune) *Layout {
-
 	r := &Layout{Width: len(arrays[0]), Height: len(arrays)}
+	r.RNG = rand.New(rand.NewSource(rand.Int63()))
 	r.Data = [][]rune{}
 	for y := 0; y < len(arrays); y++ {
 		r.Data = append(r.Data, []rune{})
@@ -56,12 +54,10 @@ func NewLayoutFromRuneArrays(arrays [][]rune) *Layout {
 	}
 
 	return r
-
 }
 
 // NewLayoutFromStringArray creates a new Map with the data contained in the provided string array.
 func NewLayoutFromStringArray(array []string) *Layout {
-
 	runes := [][]rune{}
 
 	for _, str := range array {
@@ -69,7 +65,11 @@ func NewLayoutFromStringArray(array []string) *Layout {
 	}
 
 	return NewLayoutFromRuneArrays(runes)
+}
 
+// Set the source used for random number generation. Primarily useful for debugging and testing.
+func (layout *Layout) SetRNG(source rand.Source) {
+	layout.RNG = rand.New(source)
 }
 
 type BSPOptions struct {
@@ -87,7 +87,6 @@ func NewDefaultBSPOptions() BSPOptions {
 		DoorValue:       '#',
 		MinimumRoomSize: 4,
 	}
-
 }
 
 // BSPRoom represents a room generated through Layout.GenerateBSP().
@@ -159,7 +158,6 @@ func (bsp *BSPRoom) CountHopsTo(room *BSPRoom) int {
 	}
 
 	return -1
-
 }
 
 // Disconnect removes the BSPRoom from any of its neighbors' Connected lists, breaking the link between them.
@@ -175,7 +173,6 @@ func (bsp *BSPRoom) Disconnect() {
 	}
 
 	bsp.Connected = []*BSPRoom{}
-
 }
 
 // Necessary returns if the BSPRoom is necessary to facilitate traversal from its neighbors to the rest of the BSP Layout.
@@ -224,19 +221,18 @@ func (bsp *BSPRoom) Necessary() bool {
 // where rooms start and stop, and can be used in accordance with Layout.Set() or Layout.Select() to modify these rooms. For BSP
 // Generation, walls are always on the X and Y lines of the Layout only; not the right or bottom sides.
 func (layout *Layout) GenerateBSP(bspOptions BSPOptions) []*BSPRoom {
-
 	layout.Select().Fill(' ')
 
 	subSplit := func(parent *BSPRoom) (*BSPRoom, *BSPRoom, bool) {
 
-		vertical := rand.Float32() >= 0.5
+		vertical := layout.RNG.Float32() >= 0.5
 		if parent.W > parent.H*2 {
 			vertical = true
 		} else if parent.H > parent.W*2 {
 			vertical = false
 		}
 
-		splitPercentage := 0.2 + rand.Float32()*0.6
+		splitPercentage := 0.2 + layout.RNG.Float32()*0.6
 
 		if vertical {
 
@@ -284,31 +280,23 @@ func (layout *Layout) GenerateBSP(bspOptions BSPOptions) []*BSPRoom {
 		NewBSPRoom(0, 0, layout.Width, layout.Height),
 	}
 
-	if layout.Seed > math.MinInt64 {
-		rand.Seed(layout.Seed)
-	} else {
-		rand.Seed(time.Now().UnixNano())
-	}
-
 	splitCount := 0
 
 	i := 0
-	for true {
-
+	for {
 		// Sort the rooms so bigger ones can be prioritized sometimes
 		sort.Slice(rooms, func(i, j int) bool {
 			// return rooms[i].Area() > rooms[j].Area()
 			return rooms[i].MinSize() > rooms[j].MinSize()
 		})
 
-		splitChoice := rooms[rand.Intn(len(rooms))]
+		splitChoice := rooms[layout.RNG.Intn(len(rooms))]
 
-		if rand.Float32() >= 0.2 {
+		if layout.RNG.Float32() >= 0.2 {
 			splitChoice = rooms[0] // Try to split the biggest rooms first
 		}
 
 		// Do the split
-
 		a, b, success := subSplit(splitChoice)
 
 		i++
@@ -347,7 +335,7 @@ func (layout *Layout) GenerateBSP(bspOptions BSPOptions) []*BSPRoom {
 
 		spawnOptions := []int{0, 1, 2}
 
-		spawnChoice := spawnOptions[rand.Intn(len(spawnOptions))]
+		spawnChoice := spawnOptions[layout.RNG.Intn(len(spawnOptions))]
 
 		// Rooms on the border must generate a doorway that works for them
 		if subroom.X == 0 || subroom.Y == 0 {
@@ -370,7 +358,7 @@ func (layout *Layout) GenerateBSP(bspOptions BSPOptions) []*BSPRoom {
 
 				}
 
-				doorway := possibleExits[rand.Intn(len(possibleExits))]
+				doorway := possibleExits[layout.RNG.Intn(len(possibleExits))]
 
 				layout.Set(doorway.X, doorway.Y, bspOptions.DoorValue)
 
@@ -409,7 +397,7 @@ func (layout *Layout) GenerateBSP(bspOptions BSPOptions) []*BSPRoom {
 
 				}
 
-				doorway := possibleExits[rand.Intn(len(possibleExits))]
+				doorway := possibleExits[layout.RNG.Intn(len(possibleExits))]
 
 				layout.Set(doorway.X, doorway.Y, bspOptions.DoorValue)
 
@@ -438,14 +426,7 @@ func (layout *Layout) GenerateBSP(bspOptions BSPOptions) []*BSPRoom {
 // they can be. connectRooms determines if the algorithm should also attempt to connect the rooms using pathways between each room. The
 // function returns the positions of each room created.
 func (layout *Layout) GenerateRandomRooms(emptyRune rune, wallRune rune, roomCount, roomMinWidth, roomMinHeight, roomMaxWidth, roomMaxHeight int, connectRooms bool) [][]int {
-
 	layout.Select().Fill(wallRune)
-
-	if layout.Seed > math.MinInt64 {
-		rand.Seed(layout.Seed)
-	} else {
-		rand.Seed(time.Now().UnixNano())
-	}
 
 	roomPositions := make([][]int, 0)
 
@@ -453,13 +434,13 @@ func (layout *Layout) GenerateRandomRooms(emptyRune rune, wallRune rune, roomCou
 
 		// roomSize := float64(2 + rand.Intn(2))
 
-		sx := rand.Intn(layout.Width)
-		sy := rand.Intn(layout.Height)
+		sx := layout.RNG.Intn(layout.Width)
+		sy := layout.RNG.Intn(layout.Height)
 
 		roomPositions = append(roomPositions, []int{sx, sy})
 
-		roomW := roomMinWidth + rand.Intn(roomMaxWidth-roomMinWidth)
-		roomH := roomMinHeight + rand.Intn(roomMaxHeight-roomMinHeight)
+		roomW := roomMinWidth + layout.RNG.Intn(roomMaxWidth-roomMinWidth)
+		roomH := roomMinHeight + layout.RNG.Intn(roomMaxHeight-roomMinHeight)
 
 		drawRoom := func(x, y int) bool {
 			dx := int(math.Abs(float64(sx) - float64(x)))
@@ -504,23 +485,15 @@ func (layout *Layout) GenerateRandomRooms(emptyRune rune, wallRune rune, roomCou
 // value being placed. This can be used to generate maps more similar to simple natural cave systems, as an imaginary example.
 // Link: http://www.roguebasin.com/index.php?title=Random_Walk_Cave_Generation
 func (layout *Layout) GenerateDrunkWalk(emptyRune rune, wallRune rune, percentageFilled float32) {
-
 	layout.Select().Fill(wallRune)
 
-	if layout.Seed > math.MinInt64 {
-		rand.Seed(layout.Seed)
-	} else {
-		rand.Seed(time.Now().UnixNano())
-	}
-
-	sx := rand.Intn(layout.Width)
-	sy := rand.Intn(layout.Height)
+	sx := layout.RNG.Intn(layout.Width)
+	sy := layout.RNG.Intn(layout.Height)
 	fillCount := float32(0)
 
 	totalArea := float32(layout.Area())
 
-	for true {
-
+	for {
 		cell := layout.Get(sx, sy)
 
 		if cell != emptyRune {
@@ -528,7 +501,7 @@ func (layout *Layout) GenerateDrunkWalk(emptyRune rune, wallRune rune, percentag
 			fillCount++
 		}
 
-		dir := rand.Intn(4)
+		dir := layout.RNG.Intn(4)
 
 		if dir == 0 {
 			sx++
