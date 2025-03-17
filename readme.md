@@ -56,7 +56,7 @@ func Init() {
 After generating the Layout, Selections can be used to filter out pieces of the Layout to alter them. Selections can also be chained together. As an example, say you wanted to randomly change a small percentage of floor tiles (' ') into trap tiles ('z'). You could easily do this with Selections, like so:
 
 ```go
-    GameMap.Select().FilterByValue(' ').FilterByPercentage(0.1).Fill('z')
+    GameMap.Select().FilterByRune(' ').FilterByPercentage(0.1).Fill('z')
 ```
 
 ---
